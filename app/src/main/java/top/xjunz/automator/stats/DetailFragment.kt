@@ -10,10 +10,13 @@ import android.view.ViewGroup
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.snackbar.Snackbar
 import top.xjunz.automator.R
 import top.xjunz.automator.app.AutomatorApp
+import top.xjunz.automator.app.AutomatorViewModel
 import top.xjunz.automator.databinding.FragmentDetailBinding
 import top.xjunz.automator.model.Record
+import top.xjunz.automator.rules.AppRulePreferences
 import top.xjunz.automator.stats.model.RecordWrapper
 import top.xjunz.automator.util.formatTime
 import top.xjunz.automator.util.setVisible
@@ -82,7 +85,34 @@ class DetailFragment : DialogFragment() {
                 tvAveCount.setVisible(false)
             }
             tvCount.text = getString(R.string.format_total_count, vm.record.count)
+            btnBlacklist.setOnClickListener { blacklistCurrentApp() }
         }
+        updateBlacklistButton()
+    }
+
+    private fun updateBlacklistButton() {
+        val blacklisted = AppRulePreferences.getPackageRuleState(vm.record.pkgName).blacklisted
+        binding.btnBlacklist.isEnabled = !blacklisted
+        binding.btnBlacklist.setText(
+            if (blacklisted) R.string.already_blacklisted else R.string.false_positive_blacklist
+        )
+    }
+
+    private fun blacklistCurrentApp() {
+        val packageName = vm.record.pkgName
+        val previousState = AppRulePreferences.getPackageRuleState(packageName)
+        AppRulePreferences.blacklistPackage(packageName)
+        AutomatorViewModel.get().syncRuleConfiguration()
+        updateBlacklistButton()
+        Snackbar.make(
+            binding.root,
+            getString(R.string.format_blacklisted_app, vm.appName),
+            Snackbar.LENGTH_LONG
+        ).setAction(R.string.undo) {
+            AppRulePreferences.restorePackageRule(packageName, previousState)
+            AutomatorViewModel.get().syncRuleConfiguration()
+            updateBlacklistButton()
+        }.show()
     }
 
 

@@ -19,6 +19,8 @@ import top.xjunz.automator.BuildConfig
 import top.xjunz.automator.IAutomatorConnection
 import top.xjunz.automator.OnCheckResultListener
 import top.xjunz.automator.model.Record
+import top.xjunz.automator.rules.AppRulePreferences
+import top.xjunz.automator.util.Records
 import java.io.FileInputStream
 import java.util.*
 import java.util.concurrent.TimeoutException
@@ -84,6 +86,8 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
     val error = MutableLiveData<Throwable?>()
 
     val skippingTimes = MutableLiveData<Int?>()
+
+    val latestAction = MutableLiveData<Record?>()
 
     /**
      * The millisecond timestamp when our service is started.
@@ -181,6 +185,7 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
                         try {
                             Log.i(tag, sayHello())
                             binder.linkToDeath(deathRecipient, 0)
+                            pushRuleConfiguration(this)
                             if (!isMonitoring) {
                                 setBasicEnvInfo(AutomatorApp.getBasicEnvInfo())
                                 initFileDescriptors()
@@ -189,6 +194,7 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
                                 Log.i(tag, "Monitoring started successfully!")
                             }
                             skippingTimes.value = skippingCount
+                            latestAction.value = records.maxByOrNull { it.latestTimestamp }
                             serviceStartTimestamp = startTimestamp
                             isRunning.value = true
                         } catch (t: Throwable) {
@@ -311,6 +317,39 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
 
     fun updateSkippingCount() = whenServiceIsAlive {
         skippingTimes.value = skippingCount
+    }
+
+    private fun pushRuleConfiguration(service: IAutomatorConnection) {
+        val rules = AppRulePreferences.snapshot()
+        service.configureRules(
+            rules.enabled,
+            rules.strictMode,
+            ArrayList(rules.whitelist),
+            ArrayList(rules.blacklist),
+            rules.singleClickLimitEnabled
+        )
+    }
+
+    fun syncRuleConfiguration() = whenServiceIsAlive {
+        pushRuleConfiguration(this)
+    }
+
+    fun updateLatestAction() = viewModelScope.launch {
+        val latest = withContext(Dispatchers.IO) {
+            val remoteRecords = runCatching {
+                if (isServiceAlive()) automatorService?.records else null
+            }.getOrNull()
+            val availableRecords = remoteRecords ?: runCatching {
+                val file = app.getFileStreamPath(RECORD_FILE_NAME)
+                if (file.exists()) {
+                    app.openFileInput(RECORD_FILE_NAME).use { Records(it.fd).parse().asList() }
+                } else {
+                    emptyList()
+                }
+            }.getOrDefault(emptyList())
+            availableRecords.maxByOrNull { it.latestTimestamp }
+        }
+        latestAction.value = latest
     }
 
 

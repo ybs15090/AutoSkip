@@ -39,6 +39,11 @@
             android:theme="@style/Base.Automator.Fullscreen" />
 
         <activity
+            android:name=".rules.AppRulesActivity"
+            android:exported="false"
+            android:theme="@style/Base.Automator.Scrim" />
+
+        <activity
             android:name=".stats.StatsActivity"
             android:theme="@style/Base.Automator.Scrim" />
 

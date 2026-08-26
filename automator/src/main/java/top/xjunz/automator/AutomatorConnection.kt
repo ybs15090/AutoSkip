@@ -18,6 +18,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import dev.rikka.tools.refine.Refine
 import rikka.shizuku.SystemServiceHelper
 import top.xjunz.automator.model.Result
+import top.xjunz.automator.rules.ApplicationRuleMatcher
 import top.xjunz.automator.util.Records
 import top.xjunz.automator.util.formatCurrentTime
 import java.io.*
@@ -61,6 +62,13 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         Records(recordFileDescriptor!!.fileDescriptor)
     }
     private var monitoring: Boolean = false
+    private val ruleLock = Any()
+    private var applicationRulesEnabled = true
+    private var strictMode = false
+    @Volatile
+    private var singleClickLimitEnabled = false
+    private val whitelist = mutableSetOf<String>()
+    private val blacklist = mutableSetOf<String>()
 
     init {
         try {
@@ -143,6 +151,10 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 if (packageName.startsWith("com.android")) return@listener
                 //ignore the host app
                 if (packageName == APPLICATION_ID) return@listener
+                //ignore packages disabled by the user
+                if (!isPackageEnabled(packageName)) return@listener
+                //when enabled, allow only one injected click during the same foreground session
+                if (singleClickLimitEnabled && !distinct) return@listener
                 //start checking
                 checkSource(source, checkResult.apply { reset() }, true)
                 //to avoid repeated increments, increment only when distinct
@@ -213,6 +225,33 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     }
 
     override fun setBasicEnvInfo(info: String?) = log(info)
+
+    override fun configureRules(
+        enabled: Boolean,
+        strictMode: Boolean,
+        whitelist: MutableList<String>?,
+        blacklist: MutableList<String>?,
+        singleClickLimitEnabled: Boolean
+    ) = synchronized(ruleLock) {
+        applicationRulesEnabled = enabled
+        this.strictMode = strictMode
+        this.singleClickLimitEnabled = singleClickLimitEnabled
+        this.whitelist.clear()
+        whitelist?.let(this.whitelist::addAll)
+        this.blacklist.clear()
+        blacklist?.let(this.blacklist::addAll)
+        Unit
+    }
+
+    private fun isPackageEnabled(packageName: String) = synchronized(ruleLock) {
+        ApplicationRuleMatcher.isPackageEnabled(
+            applicationRulesEnabled,
+            strictMode,
+            whitelist,
+            blacklist,
+            packageName
+        )
+    }
 
     override fun setSkippingCount(count: Int) {
         check(count > -1)

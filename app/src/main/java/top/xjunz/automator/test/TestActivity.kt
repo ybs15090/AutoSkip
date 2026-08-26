@@ -3,7 +3,6 @@ package top.xjunz.automator.test
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.os.Bundle
-import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
 import top.xjunz.automator.OnCheckResultListener
@@ -24,7 +23,7 @@ class TestActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_test)
-        binding.host = this
+        binding.btnTest.setOnClickListener { test() }
     }
 
 
@@ -65,7 +64,7 @@ class TestActivity : AppCompatActivity() {
         }
     }
 
-    fun test(view: View) {
+    private fun test() {
         viewModel.launchStandaloneCheck(resultListener)
     }
 }

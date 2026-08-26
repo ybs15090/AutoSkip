@@ -17,6 +17,7 @@ import androidx.core.view.isVisible
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.Observer
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.snackbar.Snackbar
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuProvider.MANAGER_APPLICATION_ID
 import rikka.sui.Sui
@@ -27,6 +28,9 @@ import top.xjunz.automator.autostart.isAutoStartEnabled
 import top.xjunz.automator.autostart.isShizukuAutoStartEnabled
 import top.xjunz.automator.autostart.setAutoStartComponentEnable
 import top.xjunz.automator.databinding.ActivityMainBinding
+import top.xjunz.automator.model.Record
+import top.xjunz.automator.rules.AppRulePreferences
+import top.xjunz.automator.rules.AppRulesActivity
 import top.xjunz.automator.stats.StatsActivity
 import top.xjunz.automator.test.TestActivity
 import top.xjunz.automator.util.*
@@ -46,6 +50,9 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val SHIZUKU_PERMISSION_REQUEST_CODE = 13
     }
+
+    private var latestActionPackage: String? = null
+    private var latestActionLabel: CharSequence? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -179,8 +186,17 @@ class MainActivity : AppCompatActivity() {
                     isAutoStarted.value = null
                 }
             }
+            latestAction.observe(this@MainActivity, ::renderLatestAction)
             if (!initialized) init()
         }
+        binding.ibMenu.setOnClickListener { showMenu() }
+        binding.btnFalsePositive.setOnClickListener { blacklistLatestAction() }
+        binding.btnRun.setOnClickListener { viewModel.toggleService() }
+        binding.btnRequestPermission.setOnClickListener { requestPermission() }
+        binding.btnShizukuAction.setOnClickListener { performShizukuAction() }
+        binding.rlTest.setOnClickListener { testAvailability() }
+        binding.rlStats.setOnClickListener { showRecords() }
+        binding.rlAppRules.setOnClickListener { showAppRules() }
     }
 
     override fun onResume() {
@@ -188,6 +204,62 @@ class MainActivity : AppCompatActivity() {
         viewModel.syncShizukuInstallationState()
         viewModel.updateGranted()
         viewModel.updateSkippingCount()
+        viewModel.syncRuleConfiguration()
+        viewModel.updateLatestAction()
+    }
+
+    private fun renderLatestAction(record: Record?) {
+        if (record == null) {
+            binding.rlLatestAction.visibility = View.GONE
+            latestActionPackage = null
+            latestActionLabel = null
+            return
+        }
+        latestActionPackage = record.pkgName
+        val appInfo = runCatching { packageManager.getApplicationInfo(record.pkgName, 0) }.getOrNull()
+        latestActionLabel = appInfo?.let {
+            runCatching { it.loadLabel(packageManager) }.getOrNull()
+        } ?: record.pkgName
+        binding.apply {
+            rlLatestAction.visibility = View.VISIBLE
+            tvLatestActionApp.text = latestActionLabel
+            tvLatestActionDetail.text = getString(
+                R.string.format_recent_action_detail,
+                formatTime(record.latestTimestamp),
+                record.text ?: getString(R.string.skip)
+            )
+            ivLatestAction.setImageDrawable(
+                appInfo?.let { runCatching { it.loadIcon(packageManager) }.getOrNull() }
+                    ?: packageManager.defaultActivityIcon
+            )
+        }
+        updateLatestActionBlacklistState()
+    }
+
+    private fun updateLatestActionBlacklistState() {
+        val packageName = latestActionPackage ?: return
+        val blacklisted = AppRulePreferences.getPackageRuleState(packageName).blacklisted
+        binding.btnFalsePositive.isEnabled = !blacklisted
+        binding.btnFalsePositive.setText(
+            if (blacklisted) R.string.already_blacklisted else R.string.false_positive_blacklist
+        )
+    }
+
+    private fun blacklistLatestAction() {
+        val packageName = latestActionPackage ?: return
+        val previousState = AppRulePreferences.getPackageRuleState(packageName)
+        AppRulePreferences.blacklistPackage(packageName)
+        viewModel.syncRuleConfiguration()
+        updateLatestActionBlacklistState()
+        Snackbar.make(
+            binding.root,
+            getString(R.string.format_blacklisted_app, latestActionLabel ?: packageName),
+            Snackbar.LENGTH_LONG
+        ).setAction(R.string.undo) {
+            AppRulePreferences.restorePackageRule(packageName, previousState)
+            viewModel.syncRuleConfiguration()
+            updateLatestActionBlacklistState()
+        }.show()
     }
 
     private fun toast(msg: String) {
@@ -212,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun showMenu(view: View) {
+    private fun showMenu() {
         popupMenu.menu.findItem(R.id.item_auto_start).isChecked = isAutoStartEnabled()
         popupMenu.show()
     }
@@ -225,7 +297,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun performShizukuAction(view: View) {
+    private fun performShizukuAction() {
         if (viewModel.isInstalled.value == true) {
             launchShizukuManager()
         } else {
@@ -239,7 +311,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun requestPermission(view: View) {
+    private fun requestPermission() {
         if (Shizuku.shouldShowRequestPermissionRationale()) {
             toast(getString(R.string.pls_grant_manually))
         } else {
@@ -255,7 +327,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun testAvailability(view: View) {
+    private fun testAvailability() {
         if (viewModel.isServiceAlive()) {
             startActivity(Intent(this, TestActivity::class.java))
         } else {
@@ -263,9 +335,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    fun showRecords(view: View) {
+    private fun showRecords() {
         if (viewModel.skippingTimes.value != 0) {
             startActivity(Intent(this, StatsActivity::class.java))
         }
+    }
+
+    private fun showAppRules() {
+        startActivity(Intent(this, AppRulesActivity::class.java))
     }
 }

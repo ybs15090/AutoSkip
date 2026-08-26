@@ -2,12 +2,7 @@
 <layout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <data>
-
-        <variable
-            name="host"
-            type="top.xjunz.automator.test.TestActivity" />
-    </data>
+    <data />
 
     <top.xjunz.automator.test.TestLayout
         android:id="@+id/test_layout"
@@ -125,11 +120,11 @@
 
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_test"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginHorizontal="8dp"
-                android:onClick="test"
                 android:text="@string/test"
                 app:cornerRadius="@dimen/corner_btn" />
 

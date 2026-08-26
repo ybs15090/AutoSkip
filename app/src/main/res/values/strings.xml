@@ -88,4 +88,23 @@
     <string name="feedback_issues">Issues</string>
     <string name="night_mode">夜间模式</string>
     <string name="text">文本</string>
+    <string name="application_rules">应用范围</string>
+    <string name="application_rules_summary">设置哪些应用允许自动跳过</string>
+    <string name="application_rules_master_switch">应用范围控制</string>
+    <string name="application_rules_master_summary">关闭后忽略白名单和黑名单，对所有可识别应用生效</string>
+    <string name="strict_mode">严格模式</string>
+    <string name="strict_mode_summary">开启后，只对您手动开启的应用生效</string>
+    <string name="single_click_limit">单次点击限制</string>
+    <string name="single_click_limit_summary">开启后，每次进入一个应用最多自动点击一次；默认关闭</string>
+    <string name="search_apps">搜索应用名称或包名</string>
+    <string name="normal_mode_hint">普通模式：关闭某个应用的开关会将其加入黑名单。</string>
+    <string name="strict_mode_hint">严格模式：只有开关已开启的应用才会自动跳过。</string>
+    <string name="application_rules_disabled_hint">应用范围控制已关闭，下面的设置会保留但暂不生效。</string>
+    <string name="app_rule_switch">允许在此应用中自动跳过</string>
+    <string name="recent_action">最近动作</string>
+    <string name="format_recent_action_detail">%1$s · 点击“%2$s”</string>
+    <string name="false_positive_blacklist">误触，加入黑名单</string>
+    <string name="already_blacklisted">已加入黑名单</string>
+    <string name="format_blacklisted_app">已将“%s”加入黑名单</string>
+    <string name="undo">撤销</string>
 </resources>

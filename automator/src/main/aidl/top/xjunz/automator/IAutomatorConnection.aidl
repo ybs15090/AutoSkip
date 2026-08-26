@@ -29,6 +29,9 @@ interface IAutomatorConnection {
 
     void setSkippingCount(in int count)=14;
 
+    void configureRules(boolean enabled, boolean strictMode, in List<String> whitelist,
+        in List<String> blacklist, boolean singleClickLimitEnabled)=17;
+
     void standaloneCheck(in OnCheckResultListener listener)=15;
 
     List<Record> getRecords()=16;
