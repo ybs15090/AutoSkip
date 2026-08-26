@@ -1,17 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?><!--suppress AndroidUnknownAttribute -->
-<layout xmlns:app="http://schemas.android.com/apk/res-auto"
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <data>
-
-        <import type="android.text.method.LinkMovementMethod" />
-
-        <variable
-            name="vm"
-            type="top.xjunz.automator.app.AutomatorViewModel" />
-    </data>
-
-    <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         tools:ignore="ContentDescription">
@@ -46,7 +38,6 @@
                 android:src="@drawable/ic_baseline_more_vert_24" />
         </FrameLayout>
 
-
         <androidx.core.widget.NestedScrollView
             android:id="@+id/scroll_view"
             android:layout_width="match_parent"
@@ -57,195 +48,258 @@
 
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingHorizontal="@dimen/spacing_unit">
+                android:paddingHorizontal="@dimen/spacing_unit"
+                android:paddingBottom="@dimen/spacing_normal">
 
-
-                <RelativeLayout
+                <LinearLayout
+                    android:id="@+id/layout_setup_checklist"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@drawable/bg_option_frame"
                     android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:id="@+id/tv_service_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@{vm.isRunning()?@string/service_is_running:vm.isBinding()?@string/service_connecting:@string/service_not_started}"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-                        android:textColor="?android:textColorPrimary"
-                        tools:text="@string/service_not_started" />
-
-                    <TextView
-                        android:id="@+id/tv_caption_status"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_service_status"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:text="@string/pls_activate_service"
-                        android:typeface="monospace" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_run"
-                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:activated="@{vm.isRunning()}"
-                        android:enabled="false"
-                        android:stateListAnimator="@null"
-                        android:text="@{vm.isRunning()?@string/stop_spaced:@string/run_spaced}"
-                        android:textColor="@color/color_status_text"
-                        app:backgroundTint="@color/color_status_tint"
-                        app:cornerRadius="@dimen/corner_btn"
-                        app:icon="@drawable/ic_status_control"
-                        app:iconTint="@color/color_status_icon"
-                        app:rippleColor="@color/color_status_ripple"
-                        app:strokeColor="@color/color_status_stroke"
-                        tools:ignore="RelativeOverlap"
-                        tools:text="@string/run_spaced" />
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:id="@+id/rl_latest_action"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
                     android:padding="16dp"
                     android:visibility="gone">
 
-                    <ImageView
-                        android:id="@+id/iv_latest_action"
-                        style="@style/TintedIcon.Main"
-                        android:layout_alignTop="@id/tv_latest_action_title"
-                        android:background="@drawable/bg_circle"
-                        android:contentDescription="@string/icon"
-                        android:src="@drawable/ic_baseline_touch_app_24" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/setup_checklist_title"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
 
                     <TextView
-                        android:id="@+id/tv_latest_action_title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_toEndOf="@id/iv_latest_action"
-                        android:text="@string/recent_action"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
-
-                    <TextView
-                        android:id="@+id/tv_latest_action_app"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_latest_action_title"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:layout_toEndOf="@id/iv_latest_action"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
-                        tools:text="示例应用" />
-
-                    <TextView
-                        android:id="@+id/tv_latest_action_detail"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_latest_action_app"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="@dimen/spacing_small"
-                        android:layout_toEndOf="@id/iv_latest_action"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                        tools:text="2026-08-26 16:00:00 · 点击“跳过”" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_false_positive"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_alignParentEnd="true"
-                        android:layout_below="@id/tv_latest_action_detail"
-                        android:layout_marginTop="@dimen/spacing_small"
-                        android:text="@string/false_positive_blacklist" />
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
-                    android:padding="16dp">
-
-                    <TextView
-                        android:id="@+id/tv_activate_via_shizuku"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/activate_via_shizuku"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-                        android:textColor="?android:textColorPrimary" />
-
-                    <TextView
-                        android:id="@+id/tv_intro_to_shizuku"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_activate_via_shizuku"
-                        android:layout_alignParentEnd="true"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:letterSpacing=".05"
-                        android:lineSpacingExtra="1dp"
-                        android:movementMethod="@{LinkMovementMethod.getInstance()}"
-                        android:text="@string/intro_to_shizuku"
-                        android:typeface="monospace" />
-
-                    <Space
-                        android:id="@+id/center"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerHorizontal="true" />
-
-                    <androidx.appcompat.widget.LinearLayoutCompat
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_intro_to_shizuku"
                         android:layout_marginTop="@dimen/spacing_unit"
-                        android:gravity="center_vertical">
+                        android:text="@string/setup_checklist_summary"
+                        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2" />
 
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="@dimen/spacing_normal"
+                        android:background="?dividerHorizontal" />
+
+                    <LinearLayout
+                        android:id="@+id/ll_setup_steps"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layout_daily_home"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <androidx.constraintlayout.widget.ConstraintLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_option_frame"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:id="@+id/tv_service_status"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="@dimen/spacing_unit"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
+                            android:textColor="?android:textColorPrimary"
+                            app:layout_constraintEnd_toStartOf="@id/btn_run"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            tools:text="@string/auto_skip_is_running" />
+
+                        <TextView
+                            android:id="@+id/tv_caption_status"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/spacing_unit"
+                            android:layout_marginEnd="@dimen/spacing_unit"
+                            android:typeface="monospace"
+                            app:layout_constraintEnd_toStartOf="@id/btn_run"
+                            app:layout_constraintStart_toStartOf="parent"
+                            app:layout_constraintTop_toBottomOf="@id/tv_service_status"
+                            tools:text="@string/hint_start_auto_skip" />
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_request_permission"
+                            android:id="@+id/btn_run"
                             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="@dimen/spacing_unit"
-                            android:layout_toEndOf="@id/center"
-                            android:layout_weight="0"
-                            android:enabled="@{vm.isAvailable()&amp;&amp;!vm.isGranted()}"
                             android:stateListAnimator="@null"
-                            android:text="@{vm.isGranted()?@string/activated_spaced:@string/activate_spaced}"
+                            android:text="@string/action_start_auto_skip"
                             android:textColor="@color/color_status_text"
+                            app:backgroundTint="@color/color_status_tint"
                             app:cornerRadius="@dimen/corner_btn"
-                            app:icon="@drawable/ic_baseline_bolt_24"
-                            app:iconGravity="textStart"
+                            app:icon="@drawable/ic_status_control"
                             app:iconTint="@color/color_status_icon"
-                            app:strokeColor="@color/color_status_stroke"
-                            app:strokeWidth="1dp" />
+                            app:layout_constraintBottom_toBottomOf="parent"
+                            app:layout_constraintEnd_toEndOf="parent"
+                            app:layout_constraintTop_toTopOf="parent"
+                            app:rippleColor="@color/color_status_ripple"
+                            app:strokeColor="@color/color_status_stroke" />
+                    </androidx.constraintlayout.widget.ConstraintLayout>
+
+                    <RelativeLayout
+                        android:id="@+id/rl_latest_action"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_unit"
+                        android:background="@drawable/bg_option_frame"
+                        android:padding="16dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/iv_latest_action"
+                            style="@style/TintedIcon.Main"
+                            android:layout_alignTop="@id/tv_latest_action_title"
+                            android:background="@drawable/bg_circle"
+                            android:contentDescription="@string/icon"
+                            android:src="@drawable/ic_baseline_touch_app_24" />
+
+                        <TextView
+                            android:id="@+id/tv_latest_action_title"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_toEndOf="@id/iv_latest_action"
+                            android:text="@string/recent_action"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+                        <TextView
+                            android:id="@+id/tv_latest_action_app"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tv_latest_action_title"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginTop="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_latest_action"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+                            tools:text="示例应用" />
+
+                        <TextView
+                            android:id="@+id/tv_latest_action_detail"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tv_latest_action_app"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginTop="@dimen/spacing_small"
+                            android:layout_toEndOf="@id/iv_latest_action"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                            tools:text="2026-08-26 16:00:00 · 点击“跳过”" />
 
                         <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_shizuku_action"
-                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                            android:layout_width="0dp"
+                            android:id="@+id/btn_false_positive"
+                            style="@style/Widget.MaterialComponents.Button.TextButton"
+                            android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginStart="@dimen/spacing_unit"
-                            android:layout_weight="1"
-                            android:activated="@{vm.isInstalled()}"
-                            android:stateListAnimator="@null"
-                            android:text="@{vm.isInstalled()?@string/launch_shizuku_client:@string/install_shizuku}"
-                            app:cornerRadius="@dimen/corner_btn"
-                            app:icon="@drawable/ic_shizuku_action"
-                            app:iconGravity="textStart"
-                            app:strokeColor="?colorPrimary"
-                            app:strokeWidth="1dp" />
-                    </androidx.appcompat.widget.LinearLayoutCompat>
-                </RelativeLayout>
+                            android:layout_alignParentEnd="true"
+                            android:layout_below="@id/tv_latest_action_detail"
+                            android:layout_marginTop="@dimen/spacing_small"
+                            android:text="@string/false_positive_blacklist" />
+                    </RelativeLayout>
+
+                    <RelativeLayout
+                        android:id="@+id/rl_stats"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_unit"
+                        android:background="@drawable/bg_option_frame"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="16dp">
+
+                        <ImageView
+                            android:id="@+id/iv_stats"
+                            style="@style/TintedIcon.Main"
+                            android:layout_centerVertical="true"
+                            android:src="@drawable/ic_baseline_history_24" />
+
+                        <TextView
+                            android:id="@+id/tv_stats"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginEnd="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_stats"
+                            android:layout_toStartOf="@id/iv_stats_enter"
+                            android:text="@string/statistics"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+                        <TextView
+                            android:id="@+id/tv_caption_stats"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tv_stats"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginTop="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_stats"
+                            tools:text="累计已跳过 12 次" />
+
+                        <ImageView
+                            android:id="@+id/iv_stats_enter"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:contentDescription="@string/enter"
+                            android:src="@drawable/ic_baseline_chevron_right_24" />
+                    </RelativeLayout>
+
+                    <RelativeLayout
+                        android:id="@+id/rl_app_rules"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_unit"
+                        android:background="@drawable/bg_option_frame"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:padding="16dp">
+
+                        <ImageView
+                            android:id="@+id/iv_config"
+                            style="@style/TintedIcon.Main"
+                            android:layout_centerVertical="true"
+                            android:background="@drawable/bg_circle"
+                            android:src="@drawable/ic_baseline_settings_24" />
+
+                        <TextView
+                            android:id="@+id/tv_config"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginEnd="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_config"
+                            android:layout_toStartOf="@id/iv_app_rules_enter"
+                            android:text="@string/application_rules"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tv_config"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginTop="@dimen/spacing_small"
+                            android:layout_marginEnd="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_config"
+                            android:layout_toStartOf="@id/iv_app_rules_enter"
+                            android:text="@string/application_rules_summary"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+
+                        <ImageView
+                            android:id="@+id/iv_app_rules_enter"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:contentDescription="@string/enter"
+                            android:src="@drawable/ic_baseline_chevron_right_24" />
+                    </RelativeLayout>
+                </LinearLayout>
 
                 <RelativeLayout
                     android:id="@+id/rl_m_restriction"
@@ -272,180 +326,9 @@
                         android:layout_marginTop="@dimen/spacing_unit"
                         android:letterSpacing=".05"
                         android:lineSpacingExtra="1dp"
-                        android:movementMethod="@{LinkMovementMethod.getInstance()}"
                         android:text="@string/intro_m_restriction"
                         android:textColor="?colorError"
                         android:typeface="monospace" />
-
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:id="@+id/rl_test"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:padding="16dp">
-
-                    <ImageView
-                        android:id="@+id/iv_test"
-                        style="@style/TintedIcon.Main"
-                        android:layout_centerVertical="true"
-                        android:scaleType="centerInside"
-                        android:src="@drawable/ic_baseline_bug_report_24" />
-
-                    <TextView
-                        android:id="@+id/tv_test"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_toEndOf="@id/iv_test"
-                        android:text="@string/usability_test"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
-
-                    <TextView
-                        android:id="@+id/tv_caption_test"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_test"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:layout_toEndOf="@id/iv_test"
-                        android:text="@string/caption_test" />
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:id="@+id/rl_stats"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:padding="16dp">
-
-                    <ImageView
-                        android:id="@+id/iv_stats"
-                        style="@style/TintedIcon.Main"
-                        android:layout_centerVertical="true"
-                        android:src="@drawable/ic_baseline_history_24" />
-
-                    <TextView
-                        android:id="@+id/tv_stats"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_toEndOf="@id/iv_stats"
-                        android:text="@string/statistics"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-                        tools:ignore="RelativeOverlap" />
-
-                    <TextView
-                        android:id="@+id/tv_caption_stats"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_stats"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:layout_toEndOf="@id/iv_stats"
-                        android:text="@{@string/format_total_count(vm.skippingTimes)}" />
-
-                    <ImageView
-                        visible="@{vm.skippingTimes>0}"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:contentDescription="@string/enter"
-                        android:src="@drawable/ic_baseline_chevron_right_24" />
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:id="@+id/rl_app_rules"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:padding="16dp">
-
-                    <ImageView
-                        android:id="@+id/iv_config"
-                        style="@style/TintedIcon.Main"
-                        android:layout_centerVertical="true"
-                        android:background="@drawable/bg_circle"
-                        android:src="@drawable/ic_baseline_settings_24" />
-
-                    <TextView
-                        android:id="@+id/tv_config"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerVertical="true"
-                        android:layout_marginEnd="@dimen/spacing_unit"
-                        android:layout_marginStart="16dp"
-                        android:layout_toEndOf="@id/iv_config"
-                        android:layout_toStartOf="@id/iv_app_rules_enter"
-                        android:text="@string/application_rules"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_config"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginEnd="@dimen/spacing_unit"
-                        android:layout_marginTop="@dimen/spacing_small"
-                        android:layout_toEndOf="@id/iv_config"
-                        android:layout_toStartOf="@id/iv_app_rules_enter"
-                        android:text="@string/application_rules_summary"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption" />
-
-                    <ImageView
-                        android:id="@+id/iv_app_rules_enter"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:contentDescription="@string/enter"
-                        android:src="@drawable/ic_baseline_chevron_right_24" />
-                </RelativeLayout>
-
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_unit"
-                    android:background="@drawable/bg_option_frame"
-                    android:padding="16dp">
-
-                    <ImageView
-                        android:id="@+id/iv_more"
-                        style="@style/TintedIcon.Main"
-                        android:layout_alignTop="@id/tv_more"
-                        android:layout_marginTop="4dp"
-                        android:src="@drawable/ic_baseline_more_horiz_24" />
-
-                    <TextView
-                        android:id="@+id/tv_more"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="16dp"
-                        android:layout_toEndOf="@id/iv_more"
-                        android:text="@string/about"
-                        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
-
-                    <TextView
-                        android:id="@+id/tv_caption_more"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_below="@id/tv_more"
-                        android:layout_marginStart="16dp"
-                        android:layout_marginTop="@dimen/spacing_unit"
-                        android:layout_toEndOf="@id/iv_more"
-                        android:movementMethod="@{LinkMovementMethod.getInstance()}"
-                        android:text="@string/more_to_say" />
                 </RelativeLayout>
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>

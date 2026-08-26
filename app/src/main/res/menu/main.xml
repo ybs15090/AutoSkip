@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
+        android:id="@+id/item_test"
+        android:title="@string/usability_test" />
+    <item
         android:id="@+id/item_auto_start"
         android:checkable="true"
         android:title="@string/auto_start_after_boot" />

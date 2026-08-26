@@ -160,7 +160,7 @@ class RecognitionRulesActivity : AppCompatActivity() {
             pattern = "",
             feature = RuleFeature.TEXT,
             matchMode = RuleMatchMode.CONTAINS,
-            region = RuleRegion.TOP_RIGHT,
+            region = RuleRegion.ANY,
             clickMode = RuleClickMode.AUTO
         )
         val editor = DialogEditRecognitionRuleBinding.inflate(layoutInflater)

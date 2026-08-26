@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 import rikka.shizuku.Shizuku
 import rikka.sui.Sui
 import top.xjunz.automator.BuildConfig
+import top.xjunz.automator.rules.RecognitionRulePreferences
 
 /**
  * @author xjunz 2021/6/25
@@ -53,6 +54,7 @@ class AutomatorApp : Application(), ViewModelStoreOwner {
         Sui.init(BuildConfig.APPLICATION_ID)
         appContext = applicationContext
         me = this
+        RecognitionRulePreferences.initialize()
     }
 
     override fun getViewModelStore() = appViewModelStore

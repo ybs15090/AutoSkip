@@ -172,9 +172,21 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="@dimen/spacing_normal"
             android:text="@string/false_positive_blacklist"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/dummy_frame_closeup" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_delete_record"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/spacing_small"
+            android:text="@string/delete_app_record"
+            android:textColor="?colorError"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/btn_blacklist" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 </layout>

@@ -38,7 +38,7 @@ data class RecognitionRule(
     val matchMode: RuleMatchMode = RuleMatchMode.CONTAINS,
     val pattern: String,
     val ignoreCase: Boolean = true,
-    val region: RuleRegion = RuleRegion.TOP_RIGHT,
+    val region: RuleRegion = RuleRegion.ANY,
     val delayMillis: Long = 0,
     val clickMode: RuleClickMode = RuleClickMode.AUTO
 ) {

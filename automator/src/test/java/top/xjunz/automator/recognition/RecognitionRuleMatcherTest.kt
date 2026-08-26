@@ -9,6 +9,14 @@ import org.junit.Test
 class RecognitionRuleMatcherTest {
 
     @Test
+    fun newRulesDefaultToFullScreen() {
+        assertEquals(
+            RuleRegion.ANY,
+            RecognitionRule(id = "default", pattern = "跳过").region
+        )
+    }
+
+    @Test
     fun exactTextScoresHigherThanPartialContains() {
         val rule = rule(pattern = "跳过", mode = RuleMatchMode.CONTAINS)
         assertEquals(

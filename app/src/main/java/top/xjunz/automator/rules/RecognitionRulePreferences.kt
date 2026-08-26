@@ -6,10 +6,19 @@ import top.xjunz.automator.app.AutomatorApp
 import top.xjunz.automator.recognition.RecognitionConfiguration
 import top.xjunz.automator.recognition.RecognitionRule
 import top.xjunz.automator.recognition.RecognitionRuleCodec
+import top.xjunz.automator.recognition.RuleRegion
 
 object RecognitionRulePreferences {
     private const val PREFERENCES_NAME = "recognition_rules"
     private const val KEY_CONFIGURATION = "configuration"
+    private const val KEY_DEFAULTS_REVISION = "defaults_revision"
+    private const val CURRENT_DEFAULTS_REVISION = 2
+    private val builtInRuleIds = setOf(
+        "default_text_skip_zh",
+        "default_text_skip_en",
+        "default_description_skip_zh",
+        "default_description_skip_en"
+    )
 
     private val preferences by lazy {
         AutomatorApp.appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -23,10 +32,19 @@ object RecognitionRulePreferences {
 
     fun configurationJson(): String {
         if (!preferences.contains(KEY_CONFIGURATION)) {
-            preferences.edit().putString(KEY_CONFIGURATION, defaultConfigurationJson).apply()
+            preferences.edit()
+                .putString(KEY_CONFIGURATION, defaultConfigurationJson)
+                .putInt(KEY_DEFAULTS_REVISION, CURRENT_DEFAULTS_REVISION)
+                .apply()
+        } else if (preferences.getInt(KEY_DEFAULTS_REVISION, 1) < CURRENT_DEFAULTS_REVISION) {
+            migrateBuiltInRulesToFullScreen()
         }
         return preferences.getString(KEY_CONFIGURATION, defaultConfigurationJson)
             ?: defaultConfigurationJson
+    }
+
+    fun initialize() {
+        configurationJson()
     }
 
     fun snapshot(): RecognitionConfiguration {
@@ -75,6 +93,25 @@ object RecognitionRulePreferences {
     private fun persist(configuration: RecognitionConfiguration) {
         preferences.edit()
             .putString(KEY_CONFIGURATION, RecognitionRuleCodec.encode(configuration))
+            .apply()
+    }
+
+    private fun migrateBuiltInRulesToFullScreen() {
+        val currentJson = preferences.getString(KEY_CONFIGURATION, defaultConfigurationJson)
+            ?: defaultConfigurationJson
+        val current = RecognitionRuleCodec.decode(currentJson)
+        val migrated = current.copy(
+            globalRules = current.globalRules.map { rule ->
+                if (rule.id in builtInRuleIds) {
+                    rule.copy(region = RuleRegion.ANY)
+                } else {
+                    rule
+                }
+            }
+        )
+        preferences.edit()
+            .putString(KEY_CONFIGURATION, RecognitionRuleCodec.encode(migrated))
+            .putInt(KEY_DEFAULTS_REVISION, CURRENT_DEFAULTS_REVISION)
             .apply()
     }
 }

@@ -63,6 +63,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     private val records by lazy {
         Records(recordFileDescriptor!!.fileDescriptor)
     }
+    private val recordLock = Any()
     private var monitoring: Boolean = false
     private val ruleLock = Any()
     private var applicationRulesEnabled = true
@@ -151,9 +152,11 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
 
         fun processResult(result: Result) {
             if (result.passed && distinct) {
-                skippingCount++
-                distinct = false
-                records.putResult(result)
+                synchronized(recordLock) {
+                    skippingCount++
+                    distinct = false
+                    records.putResult(result)
+                }
             }
             if (result.getReason() != Result.REASON_ILLEGAL_TARGET &&
                 lastResultHash != result.hashCode()
@@ -262,7 +265,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
 
     override fun getPid() = Os.getpid()
 
-    override fun getSkippingCount() = skippingCount
+    override fun getSkippingCount() = synchronized(recordLock) { skippingCount }
 
     override fun setFileDescriptors(pfds: Array<ParcelFileDescriptor>?) {
         check(pfds != null && pfds.size == 3)
@@ -278,10 +281,12 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 skippingCount = it.firstOrNull()?.toIntOrNull() ?: 0
                 log("The skipping count parsed: $skippingCount")
             }
-            records.parse().getRecordCount().also {
-                if (skippingCount != it) {
-                    skippingCount = it
-                    log("Skipping count inconsistency detected! Reassign the skipping count to $it")
+            synchronized(recordLock) {
+                records.parse().getRecordCount().also {
+                    if (skippingCount != it) {
+                        skippingCount = it
+                        log("Skipping count inconsistency detected! Reassign the skipping count to $it")
+                    }
                 }
             }
             log("The record file parsed")
@@ -390,7 +395,9 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
 
     override fun setSkippingCount(count: Int) {
         check(count > -1)
-        skippingCount = count
+        synchronized(recordLock) {
+            skippingCount = count
+        }
     }
 
     /**
@@ -452,7 +459,26 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         }
     }
 
-    override fun getRecords() = records.asList()
+    override fun getRecords() = synchronized(recordLock) { records.asList() }
+
+    override fun deleteRecord(packageName: String?): Boolean = synchronized(recordLock) {
+        require(!packageName.isNullOrBlank())
+        val deleted = records.removePackage(packageName)
+        if (deleted) {
+            skippingCount = records.getRecordCount()
+            persistRecordStateLocked()
+            log("Deleted records for $packageName")
+        }
+        deleted
+    }
+
+    override fun clearRecords() = synchronized(recordLock) {
+        records.clear()
+        skippingCount = 0
+        persistRecordStateLocked()
+        log("All skipping records cleared")
+        Unit
+    }
 
     /**
      * Truncate the file's length to 0 and seek its r/w position to 0, namely, clear its content.
@@ -469,8 +495,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     init {
         Runtime.getRuntime().addShutdownHook(Thread {
             log("Service is dead at ${formatCurrentTime()}. Goodbye, world!")
-            persistSkippingCount()
-            persistRecords()
+            persistRecordState()
             persistLog()
         })
     }
@@ -488,28 +513,43 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         }
     }
 
-    private fun persistSkippingCount() {
+    private inline fun writeFile(
+        pfd: ParcelFileDescriptor,
+        write: (BufferedWriter) -> Unit
+    ) {
+        truncate(pfd)
+        val duplicate = ParcelFileDescriptor.dup(pfd.fileDescriptor)
+        ParcelFileDescriptor.AutoCloseOutputStream(duplicate).bufferedWriter().use { writer ->
+            write(writer)
+            writer.flush()
+        }
+    }
+
+    private fun persistRecordState() = synchronized(recordLock) {
+        persistRecordStateLocked()
+    }
+
+    private fun persistRecordStateLocked() {
+        persistSkippingCountLocked()
+        persistRecordsLocked()
+    }
+
+    private fun persistSkippingCountLocked() {
         if (skippingCount != -1) {
             countFileDescriptor?.run {
-                truncate(this)
-                ParcelFileDescriptor.AutoCloseOutputStream(this).bufferedWriter().use {
+                writeFile(this) {
                     it.write(skippingCount.toString())
-                    it.flush()
                 }
             }
         }
     }
 
-    private fun persistRecords() {
+    private fun persistRecordsLocked() {
         recordFileDescriptor?.run {
-            if (!records.isEmpty()) {
-                truncate(this)
-                ParcelFileDescriptor.AutoCloseOutputStream(this).bufferedWriter().use {
-                    records.forEach { record ->
-                        it.write(record.toString())
-                        it.newLine()
-                    }
-                    it.flush()
+            writeFile(this) {
+                records.forEach { record ->
+                    it.write(record.toString())
+                    it.newLine()
                 }
             }
         }

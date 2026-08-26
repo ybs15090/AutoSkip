@@ -41,6 +41,8 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
     var initialized = false
 
     fun init() {
+        if (initialized) return
+        initialized = true
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
         Shizuku.addBinderDeadListener(binderDeadListener)
         readSkippingCount()
@@ -375,6 +377,110 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
             availableRecords.maxByOrNull { it.latestTimestamp }
         }
         latestAction.value = latest
+    }
+
+    private data class RecordMutationResult(
+        val successful: Boolean,
+        val count: Int,
+        val latest: Record?
+    )
+
+    suspend fun deleteRecord(packageName: String): Boolean {
+        val result = withContext(Dispatchers.IO) {
+            if (isServiceAlive()) {
+                runCatching {
+                    val service = requireNotNull(automatorService)
+                    if (!service.deleteRecord(packageName)) {
+                        RecordMutationResult(false, service.skippingCount, null)
+                    } else {
+                        val currentRecords = service.records
+                        RecordMutationResult(
+                            true,
+                            service.skippingCount,
+                            currentRecords.maxByOrNull { it.latestTimestamp }
+                        )
+                    }
+                }.onFailure {
+                    error.postValue(it)
+                }.getOrElse { RecordMutationResult(false, skippingTimes.value ?: 0, null) }
+            } else {
+                mutateLocalRecords { records ->
+                    records.removeAll { it.pkgName == packageName }
+                }
+            }
+        }
+        if (result.successful) {
+            skippingTimes.value = result.count
+            latestAction.value = result.latest
+        }
+        return result.successful
+    }
+
+    suspend fun clearRecords(): Boolean {
+        val result = withContext(Dispatchers.IO) {
+            if (isServiceAlive()) {
+                runCatching {
+                    requireNotNull(automatorService).clearRecords()
+                    RecordMutationResult(true, 0, null)
+                }.onFailure {
+                    error.postValue(it)
+                }.getOrElse { RecordMutationResult(false, skippingTimes.value ?: 0, null) }
+            } else {
+                mutateLocalRecords { records ->
+                    val changed = records.isNotEmpty()
+                    records.clear()
+                    changed
+                }
+            }
+        }
+        if (result.successful) {
+            skippingTimes.value = 0
+            latestAction.value = null
+        }
+        return result.successful
+    }
+
+    private fun mutateLocalRecords(
+        mutation: (MutableList<Record>) -> Boolean
+    ): RecordMutationResult {
+        return runCatching {
+            val records = readLocalRecords()
+            if (!mutation(records)) {
+                return@runCatching RecordMutationResult(
+                    false,
+                    records.sumOf { it.count },
+                    records.maxByOrNull { it.latestTimestamp }
+                )
+            }
+            persistLocalRecordState(records)
+            RecordMutationResult(
+                true,
+                records.sumOf { it.count },
+                records.maxByOrNull { it.latestTimestamp }
+            )
+        }.onFailure {
+            error.postValue(it)
+        }.getOrElse { RecordMutationResult(false, skippingTimes.value ?: 0, null) }
+    }
+
+    private fun readLocalRecords(): MutableList<Record> {
+        val file = app.getFileStreamPath(RECORD_FILE_NAME)
+        if (!file.exists()) return mutableListOf()
+        return app.openFileInput(RECORD_FILE_NAME).use {
+            Records(it.fd).parse().asList()
+        }
+    }
+
+    private fun persistLocalRecordState(records: List<Record>) {
+        app.openFileOutput(RECORD_FILE_NAME, 0).bufferedWriter().use { writer ->
+            records.forEach { record ->
+                writer.write(record.toString())
+                writer.newLine()
+            }
+        }
+        app.openFileOutput(COUNT_FILE_NAME, 0).bufferedWriter().use { writer ->
+            writer.write(records.sumOf { it.count }.toString())
+        }
     }
 
 

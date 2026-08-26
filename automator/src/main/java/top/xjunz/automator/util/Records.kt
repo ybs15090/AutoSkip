@@ -95,6 +95,14 @@ class Records(private val fd: FileDescriptor) : Iterable<Record> {
 
     fun isEmpty() = recordSet.isEmpty()
 
+    fun removePackage(packageName: String): Boolean {
+        return recordSet.removeAll { it.pkgName == packageName }
+    }
+
+    fun clear() {
+        recordSet.clear()
+    }
+
     override fun iterator(): Iterator<Record> = recordSet.iterator()
 
     fun asList() = ArrayList(recordSet)

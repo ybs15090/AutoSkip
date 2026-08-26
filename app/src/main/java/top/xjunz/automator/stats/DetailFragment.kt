@@ -7,9 +7,11 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import top.xjunz.automator.R
 import top.xjunz.automator.app.AutomatorApp
@@ -28,6 +30,9 @@ class DetailFragment : DialogFragment() {
     private lateinit var binding: FragmentDetailBinding
     private val vm by lazy {
         ViewModelProvider(requireActivity()).get(DetailViewModel::class.java)
+    }
+    private val statsViewModel by lazy {
+        ViewModelProvider(requireActivity()).get(StatsViewModel::class.java)
     }
     private val handler by lazy {
         Handler(Looper.getMainLooper())
@@ -86,6 +91,7 @@ class DetailFragment : DialogFragment() {
             }
             tvCount.text = getString(R.string.format_total_count, vm.record.count)
             btnBlacklist.setOnClickListener { blacklistCurrentApp() }
+            btnDeleteRecord.setOnClickListener { confirmDeleteRecord() }
         }
         updateBlacklistButton()
     }
@@ -113,6 +119,32 @@ class DetailFragment : DialogFragment() {
             AutomatorViewModel.get().syncRuleConfiguration()
             updateBlacklistButton()
         }.show()
+    }
+
+    private fun confirmDeleteRecord() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(getString(R.string.format_delete_app_record_title, vm.appName))
+            .setMessage(R.string.delete_app_record_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                statsViewModel.deleteRecord(vm.record.pkgName) { successful ->
+                    if (successful) {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.app_record_deleted,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        dismiss()
+                    } else {
+                        Toast.makeText(
+                            requireContext(),
+                            R.string.record_delete_failed,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }
+            .show()
     }
 
 

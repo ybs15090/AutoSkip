@@ -8,7 +8,7 @@
       "matchMode": "CONTAINS",
       "pattern": "跳过",
       "ignoreCase": true,
-      "region": "RIGHT",
+      "region": "ANY",
       "delayMillis": 0,
       "clickMode": "AUTO"
     },
@@ -19,7 +19,7 @@
       "matchMode": "CONTAINS",
       "pattern": "skip",
       "ignoreCase": true,
-      "region": "RIGHT",
+      "region": "ANY",
       "delayMillis": 0,
       "clickMode": "AUTO"
     },
@@ -30,7 +30,7 @@
       "matchMode": "CONTAINS",
       "pattern": "跳过",
       "ignoreCase": true,
-      "region": "RIGHT",
+      "region": "ANY",
       "delayMillis": 0,
       "clickMode": "AUTO"
     },
@@ -41,7 +41,7 @@
       "matchMode": "CONTAINS",
       "pattern": "skip",
       "ignoreCase": true,
-      "region": "RIGHT",
+      "region": "ANY",
       "delayMillis": 0,
       "clickMode": "AUTO"
     }

@@ -46,6 +46,10 @@ interface IAutomatorConnection {
 
     void stopRuleLearning()=22;
 
+    boolean deleteRecord(in String packageName)=23;
+
+    void clearRecords()=24;
+
     void destroy() = 16777114; // Destroy method defined by Shizuku server
 
 }
