@@ -5,19 +5,20 @@ import android.app.UiAutomation
 import android.app.UiAutomationConnection
 import android.app.UiAutomationHidden
 import android.content.pm.IPackageManager
-import android.graphics.Rect
 import android.os.*
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants.SEEK_SET
 import android.util.Log
-import android.view.InputDevice
-import android.view.MotionEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import dev.rikka.tools.refine.Refine
 import rikka.shizuku.SystemServiceHelper
 import top.xjunz.automator.model.Result
+import top.xjunz.automator.recognition.LearningCandidate
+import top.xjunz.automator.recognition.RecognitionConfiguration
+import top.xjunz.automator.recognition.RecognitionEngine
+import top.xjunz.automator.recognition.RecognitionRuleCodec
 import top.xjunz.automator.rules.ApplicationRuleMatcher
 import top.xjunz.automator.util.Records
 import top.xjunz.automator.util.formatCurrentTime
@@ -40,7 +41,8 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         private const val APPLICATION_ID = "top.xjunz.automator"
         const val TAG = "automator"
         const val MAX_RECORD_COUNT: Short = 500
-        val SKIP_KEYWORD:Array<String> = arrayOf("跳过", "skip")
+        private const val LEARNING_CAPTURE_INTERVAL_MILLIS = 250L
+        private const val MAX_STORED_LEARNING_CANDIDATES = 120
     }
 
     private lateinit var uiAutomationHidden: UiAutomationHidden
@@ -69,6 +71,13 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     private var singleClickLimitEnabled = false
     private val whitelist = mutableSetOf<String>()
     private val blacklist = mutableSetOf<String>()
+    @Volatile
+    private var recognitionConfiguration = RecognitionConfiguration()
+    private val recognitionEngine by lazy { RecognitionEngine(uiAutomation) }
+    private val learningLock = Any()
+    private var learningPackageName: String? = null
+    private var lastLearningCaptureTimestamp = 0L
+    private val learningCandidates = linkedMapOf<String, LearningCandidate>()
 
     init {
         try {
@@ -132,17 +141,40 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     override fun startMonitoring() {
         var distinct = false
         var oldPkgName: String? = null
+        val pendingClickKeys = mutableSetOf<String>()
         uiAutomation.serviceInfo = uiAutomation.serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOWS_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+            flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         checkResult = Result()
+
+        fun processResult(result: Result) {
+            if (result.passed && distinct) {
+                skippingCount++
+                distinct = false
+                records.putResult(result)
+            }
+            if (result.getReason() != Result.REASON_ILLEGAL_TARGET &&
+                lastResultHash != result.hashCode()
+            ) {
+                dumpResult(result, true)
+                lastResultHash = result.hashCode()
+            }
+        }
+
         uiAutomation.setOnAccessibilityEventListener listener@{ event ->
+            var eventSource: AccessibilityNodeInfo? = null
             try {
                 val packageName = event.packageName?.toString() ?: return@listener
                 if (oldPkgName != packageName) distinct = true
                 oldPkgName = packageName
                 val source = event.source ?: return@listener
+                eventSource = source
+                if (isLearningPackage(packageName)) {
+                    captureLearningCandidates(source, packageName)
+                    return@listener
+                }
                 //ignore the launcher app
                 if (packageName == launcherName) return@listener
                 //ignore the android framework
@@ -155,27 +187,65 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 if (!isPackageEnabled(packageName)) return@listener
                 //when enabled, allow only one injected click during the same foreground session
                 if (singleClickLimitEnabled && !distinct) return@listener
-                //start checking
-                checkSource(source, checkResult.apply { reset() }, true)
-                //to avoid repeated increments, increment only when distinct
-                if (checkResult.passed && distinct) {
-                    skippingCount++
-                    distinct = false
-                    records.putResult(checkResult)
+                val rules = recognitionConfiguration.rulesFor(packageName)
+                val match = recognitionEngine.findBestMatch(source, packageName, rules)
+                    ?: return@listener
+                val delayMillis = match.rule.delayMillis
+                if (delayMillis > 0) {
+                    val pendingKey = "$packageName:${match.rule.id}"
+                    val ruleId = match.rule.id
+                    match.recycle()
+                    if (!pendingClickKeys.add(pendingKey)) return@listener
+                    handler.postDelayed({
+                        pendingClickKeys.remove(pendingKey)
+                        var root: AccessibilityNodeInfo? = null
+                        var delayedMatch: RecognitionEngine.Match? = null
+                        try {
+                            root = uiAutomation.rootInActiveWindow ?: return@postDelayed
+                            val currentPackageName = root.packageName?.toString() ?: return@postDelayed
+                            if (currentPackageName != packageName || isLearningPackage(packageName)) {
+                                return@postDelayed
+                            }
+                            if (!isPackageEnabled(packageName) ||
+                                (singleClickLimitEnabled && !distinct)
+                            ) {
+                                return@postDelayed
+                            }
+                            delayedMatch = recognitionEngine.findBestMatch(
+                                root,
+                                packageName,
+                                recognitionConfiguration.rulesFor(packageName),
+                                ruleId
+                            ) ?: return@postDelayed
+                            val outcome = recognitionEngine.execute(delayedMatch)
+                            recognitionEngine.writeResult(
+                                delayedMatch,
+                                outcome,
+                                checkResult.apply { reset() }
+                            )
+                            processResult(checkResult)
+                        } catch (t: Throwable) {
+                            checkResult.maskReason(Result.REASON_ERROR)
+                            dumpError(t)
+                        } finally {
+                            delayedMatch?.recycle()
+                            root?.recycle()
+                        }
+                    }, delayMillis)
+                    return@listener
                 }
-                //should dump result after incrementing skipping count, cuz we need to
-                //dump the latest count
-                if (checkResult.getReason() != Result.REASON_ILLEGAL_TARGET) {
-                    //dump only when the result is distinct
-                    if (lastResultHash != checkResult.hashCode()) {
-                        dumpResult(checkResult, true)
-                        lastResultHash = checkResult.hashCode()
-                    }
+                try {
+                    val outcome = recognitionEngine.execute(match)
+                    recognitionEngine.writeResult(match, outcome, checkResult.apply { reset() })
+                    processResult(checkResult)
+                } finally {
+                    match.recycle()
                 }
             } catch (t: Throwable) {
                 checkResult.maskReason(Result.REASON_ERROR)
                 dumpError(t)
             } finally {
+                eventSource?.recycle()
                 event.recycle()
             }
         }
@@ -243,6 +313,42 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         Unit
     }
 
+    override fun configureRecognitionRules(rulesJson: String?) {
+        recognitionConfiguration = RecognitionRuleCodec.decode(rulesJson)
+        handler.post {
+            log(
+                "Recognition rules configured: global=${recognitionConfiguration.globalRules.size}, " +
+                    "applications=${recognitionConfiguration.applicationRules.size}"
+            )
+        }
+    }
+
+    override fun startRuleLearning(packageName: String?) = synchronized(learningLock) {
+        require(!packageName.isNullOrBlank())
+        learningPackageName = packageName
+        lastLearningCaptureTimestamp = 0L
+        learningCandidates.clear()
+        handler.post { log("Rule learning started for $packageName") }
+        Unit
+    }
+
+    override fun getRuleLearningCandidates() = synchronized(learningLock) {
+        RecognitionRuleCodec.encodeCandidates(
+            learningCandidates.values.sortedWith(
+                compareByDescending<LearningCandidate> { it.score }
+                    .thenByDescending { it.timestamp }
+            )
+        )
+    }
+
+    override fun stopRuleLearning() = synchronized(learningLock) {
+        learningPackageName?.let { packageName ->
+            handler.post { log("Rule learning stopped for $packageName") }
+        }
+        learningPackageName = null
+        Unit
+    }
+
     private fun isPackageEnabled(packageName: String) = synchronized(ruleLock) {
         ApplicationRuleMatcher.isPackageEnabled(
             applicationRulesEnabled,
@@ -251,6 +357,35 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             blacklist,
             packageName
         )
+    }
+
+    private fun isLearningPackage(packageName: String) = synchronized(learningLock) {
+        learningPackageName == packageName
+    }
+
+    private fun captureLearningCandidates(source: AccessibilityNodeInfo, packageName: String) {
+        val timestamp = System.currentTimeMillis()
+        synchronized(learningLock) {
+            if (learningPackageName != packageName ||
+                timestamp - lastLearningCaptureTimestamp < LEARNING_CAPTURE_INTERVAL_MILLIS
+            ) {
+                return
+            }
+            lastLearningCaptureTimestamp = timestamp
+        }
+        val discovered = recognitionEngine.discoverCandidates(source, packageName, timestamp)
+        synchronized(learningLock) {
+            if (learningPackageName != packageName) return
+            discovered.forEach { learningCandidates[it.key] = it }
+            if (learningCandidates.size > MAX_STORED_LEARNING_CANDIDATES) {
+                val retained = learningCandidates.values.sortedWith(
+                    compareByDescending<LearningCandidate> { it.score }
+                        .thenByDescending { it.timestamp }
+                ).take(MAX_STORED_LEARNING_CANDIDATES)
+                learningCandidates.clear()
+                retained.forEach { learningCandidates[it.key] = it }
+            }
+        }
     }
 
     override fun setSkippingCount(count: Int) {
@@ -276,20 +411,39 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     override fun standaloneCheck(listener: OnCheckResultListener) {
         handler.post {
             val standaloneResult = Result()
+            var root: AccessibilityNodeInfo? = null
+            var match: RecognitionEngine.Match? = null
             try {
-                val possibleAccessibilityNodeInfo:MutableList<AccessibilityNodeInfo> = mutableListOf()
-                SKIP_KEYWORD.forEach {
-                    possibleAccessibilityNodeInfo.addAll(uiAutomation.rootInActiveWindow.findAccessibilityNodeInfosByText(it))
-                }
-                for(it in possibleAccessibilityNodeInfo) {
-                    // skip the EditText
-                    if(it.isEditable) continue
-                    checkSource(it, standaloneResult.apply { reset() }, false)
+                root = uiAutomation.rootInActiveWindow
+                val packageName = root?.packageName?.toString()
+                if (root == null || packageName == null) {
+                    standaloneResult.maskReason(Result.REASON_ILLEGAL_TARGET)
+                } else {
+                    match = recognitionEngine.findBestMatch(
+                        root,
+                        packageName,
+                        recognitionConfiguration.rulesFor(packageName)
+                    )
+                    if (match == null) {
+                        standaloneResult.maskReason(Result.REASON_ILLEGAL_TARGET)
+                    } else {
+                        recognitionEngine.writeResult(
+                            match,
+                            RecognitionEngine.ExecutionOutcome(
+                                successful = true,
+                                effectiveBounds = match.bounds
+                            ),
+                            standaloneResult,
+                            detectionOnly = true
+                        )
+                    }
                 }
             } catch (t: Throwable) {
                 dumpError(t)
                 standaloneResult.maskReason(Result.REASON_ERROR)
             } finally {
+                match?.recycle()
+                root?.recycle()
                 //dump the result before calling the listener, cuz a marshall of result would
                 //recycle the node, hence, we could not dump it any more.
                 dumpResult(standaloneResult, !standaloneResult.passed)
@@ -299,137 +453,6 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     }
 
     override fun getRecords() = records.asList()
-
-    /**
-     * Inject a mock finger click event via [UiAutomation.injectInputEvent] into a specific [rect],
-     * corresponding to [Result.INJECTION_EVENT].
-     */
-    private fun injectFingerClickEvent(rect: Rect) {
-        val downTime = SystemClock.uptimeMillis()
-        val downAction = MotionEvent.obtain(
-            downTime, downTime, MotionEvent.ACTION_DOWN,
-            rect.exactCenterX(), rect.exactCenterY(), 0
-        )
-        downAction.source = InputDevice.SOURCE_TOUCHSCREEN
-        uiAutomation.injectInputEvent(downAction, true)
-        val upAction = MotionEvent.obtain(downAction).apply { action = MotionEvent.ACTION_UP }
-        uiAutomation.injectInputEvent(upAction, true)
-        upAction.recycle()
-        downAction.recycle()
-    }
-
-    /**
-     * Launch a standalone check finding whether a [source] node contains but one single legal target
-     * to be skipped.
-     *
-     * @param source the source node used to find the possible target
-     * @param result the result of this check
-     * @param inject should inject click to the detected legal target or not
-     */
-    private fun checkSource(source: AccessibilityNodeInfo, result: Result, inject: Boolean) {
-        result.pkgName = source.packageName.toString()
-        val possibleAccessibilityNodeInfo:MutableList<AccessibilityNodeInfo> = mutableListOf()
-        SKIP_KEYWORD.forEach {
-            possibleAccessibilityNodeInfo.addAll(source.findAccessibilityNodeInfosByText(it))
-        }
-        possibleAccessibilityNodeInfo.run {
-            when (size) {
-                0 -> result.maskReason(Result.REASON_ILLEGAL_TARGET or Result.REASON_MASK_PORTRAIT)
-                1 -> checkNode(first(), result, inject)
-                else -> result.maskReason(Result.REASON_ILLEGAL_TARGET or Result.REASON_MASK_TRANSVERSE)
-            }
-        }
-    }
-
-    private fun checkNode(node: AccessibilityNodeInfo, result: Result, inject: Boolean) {
-        result.nodeHash = node.hashCode()
-        if (!node.isVisibleToUser) {
-            result.maskReason(Result.REASON_INVISIBLE)
-            return
-        }
-        if (node.isEditable){
-            result.maskReason(Result.REASON_EDITABLE)
-            return
-        }
-        if (!checkText(node.text, result)) return
-        val nodeRect = Rect().also { node.getBoundsInScreen(it) }
-        result.bounds = nodeRect
-        val windowRect = Rect().also { node.window.getBoundsInScreen(it) }
-        if (!checkRegion(nodeRect, windowRect, result)) return
-        if (!checkSize(nodeRect, windowRect, result)) return
-        //it's enough strict to confirm a target after all these checks, so we consider any node
-        //reaching here as passed. Node click-ability is not a sufficient criteria for check.
-        result.passed = true
-        if (node.isClickable) {
-            if (inject) node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        } else {
-            result.maskReason(Result.REASON_MASK_NOT_CLICKABLE)
-            node.parent?.run {
-                val parentBounds = Rect().also { getBoundsInScreen(it) }
-                result.parentBounds = parentBounds
-                if (isClickable && checkSize(parentBounds, windowRect, result)) {
-                    result.bounds = parentBounds
-                    if (inject) performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                    return
-                }
-            }
-            //the parent has its fault when reaches this step
-            result.maskReason(Result.REASON_MASK_PARENT)
-            if (inject) injectFingerClickEvent(nodeRect)
-        }
-    }
-
-    private fun checkText(text: CharSequence, result: Result): Boolean {
-        result.text = text.trim().toString()
-        if (text.length > 10) {
-            result.maskReason(Result.REASON_ILLEGAL_TEXT or Result.REASON_MASK_TRANSVERSE)
-            return false
-        }
-        if (text.filter { it > '~' }.count() > 4) {
-            result.maskReason(Result.REASON_ILLEGAL_TEXT or Result.REASON_MASK_PORTRAIT)
-            return false
-        }
-        return true
-    }
-
-    private fun checkRegion(nodeRect: Rect, windowRect: Rect, result: Result): Boolean {
-        if (/*nodeRect.exactCenterX() > windowRect.width() / 4f &&*/ nodeRect.exactCenterX() < windowRect.width() / 3f * 2) {
-            result.maskReason(Result.REASON_ILLEGAL_LOCATION or Result.REASON_MASK_TRANSVERSE)
-            return false
-        }
-//        if (nodeRect.exactCenterY() > windowRect.height() / 4f && nodeRect.exactCenterY() < windowRect.height() / 3f * 2) {
-//            result.maskReason(Result.REASON_ILLEGAL_LOCATION or Result.REASON_MASK_PORTRAIT)
-//            return false
-//        }
-        return true
-    }
-
-    private fun checkSize(nodeRect: Rect, windowRect: Rect, result: Result): Boolean {
-        val nw = nodeRect.width().coerceAtLeast(nodeRect.height())
-        val nh = nodeRect.width().coerceAtMost(nodeRect.height())
-        val isPortrait = windowRect.width() < windowRect.height()
-        result.portrait = isPortrait
-        if (isPortrait) {
-            if (nw == 0 || nw >= windowRect.width() / 3) {
-                result.maskReason(Result.REASON_ILLEGAL_SIZE or Result.REASON_MASK_TRANSVERSE)
-                return false
-            }
-            if (nh == 0 || nh >= windowRect.height() / 8) {
-                result.maskReason(Result.REASON_ILLEGAL_SIZE or Result.REASON_MASK_PORTRAIT)
-                return false
-            }
-        } else {
-            if (nw == 0 || nw > windowRect.width() / 6) {
-                result.maskReason(Result.REASON_ILLEGAL_SIZE or Result.REASON_MASK_TRANSVERSE)
-                return false
-            }
-            if (nh == 0 || nh > windowRect.height() / 4) {
-                result.maskReason(Result.REASON_ILLEGAL_SIZE or Result.REASON_MASK_PORTRAIT)
-                return false
-            }
-        }
-        return true
-    }
 
     /**
      * Truncate the file's length to 0 and seek its r/w position to 0, namely, clear its content.

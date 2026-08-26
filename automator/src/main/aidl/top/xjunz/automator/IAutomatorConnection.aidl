@@ -38,6 +38,14 @@ interface IAutomatorConnection {
 
     void persistLog()=18;
 
+    void configureRecognitionRules(in String rulesJson)=19;
+
+    void startRuleLearning(in String packageName)=20;
+
+    String getRuleLearningCandidates()=21;
+
+    void stopRuleLearning()=22;
+
     void destroy() = 16777114; // Destroy method defined by Shizuku server
 
 }

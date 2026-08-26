@@ -20,6 +20,9 @@ import top.xjunz.automator.IAutomatorConnection
 import top.xjunz.automator.OnCheckResultListener
 import top.xjunz.automator.model.Record
 import top.xjunz.automator.rules.AppRulePreferences
+import top.xjunz.automator.rules.RecognitionRulePreferences
+import top.xjunz.automator.recognition.LearningCandidate
+import top.xjunz.automator.recognition.RecognitionRuleCodec
 import top.xjunz.automator.util.Records
 import java.io.FileInputStream
 import java.util.*
@@ -328,10 +331,32 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
             ArrayList(rules.blacklist),
             rules.singleClickLimitEnabled
         )
+        service.configureRecognitionRules(RecognitionRulePreferences.configurationJson())
     }
 
     fun syncRuleConfiguration() = whenServiceIsAlive {
         pushRuleConfiguration(this)
+    }
+
+    fun startRuleLearning(packageName: String): Boolean {
+        var started = false
+        whenServiceIsAlive {
+            this.startRuleLearning(packageName)
+            started = true
+        }
+        return started
+    }
+
+    fun getRuleLearningCandidates(): List<LearningCandidate> {
+        var candidates = emptyList<LearningCandidate>()
+        whenServiceIsAlive {
+            candidates = RecognitionRuleCodec.decodeCandidates(ruleLearningCandidates)
+        }
+        return candidates
+    }
+
+    fun stopRuleLearning() = whenServiceIsAlive {
+        this.stopRuleLearning()
     }
 
     fun updateLatestAction() = viewModelScope.launch {

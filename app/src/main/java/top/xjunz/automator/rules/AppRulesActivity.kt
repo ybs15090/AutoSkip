@@ -21,12 +21,18 @@ import java.text.Collator
 class AppRulesActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAppRulesBinding
     private val viewModel by lazy { AutomatorViewModel.get() }
-    private val appAdapter = AppRuleAdapter { packageName, enabled ->
-        AppRulePreferences.setPackageEnabled(packageName, enabled)
-        viewModel.syncRuleConfiguration()
-        refreshRuleSummary()
-    }
+    private val appAdapter = AppRuleAdapter(
+        onRuleChanged = { packageName, enabled ->
+            AppRulePreferences.setPackageEnabled(packageName, enabled)
+            viewModel.syncRuleConfiguration()
+            refreshRuleSummary()
+        },
+        onRecognitionRules = { packageName, label ->
+            startActivity(RecognitionRulesActivity.createIntent(this, packageName, label))
+        }
+    )
     private var installedApps = emptyList<AppEntry>()
+    private var recognitionRuleCounts = emptyMap<String, Int>()
     private var updatingSwitches = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,9 +43,21 @@ class AppRulesActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         binding.toolbar.setNavigationOnClickListener { finishAfterTransition() }
         binding.rvApps.adapter = appAdapter
+        binding.btnGlobalRecognitionRules.setOnClickListener {
+            startActivity(RecognitionRulesActivity.createIntent(this, null, null))
+        }
         initRuleControls()
         initSearch()
         loadApplications()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        recognitionRuleCounts = RecognitionRulePreferences.snapshot().applicationRules
+            .mapValues { it.value.size }
+        if (appAdapter.itemCount > 0) {
+            appAdapter.notifyItemRangeChanged(0, appAdapter.itemCount)
+        }
     }
 
     private fun initRuleControls() {
@@ -133,7 +151,8 @@ class AppRulesActivity : AppCompatActivity() {
     private data class AppEntry(val info: ApplicationInfo, val label: String)
 
     private inner class AppRuleAdapter(
-        private val onRuleChanged: (String, Boolean) -> Unit
+        private val onRuleChanged: (String, Boolean) -> Unit,
+        private val onRecognitionRules: (String, String) -> Unit
     ) : RecyclerView.Adapter<AppRuleAdapter.AppRuleViewHolder>() {
         private var items: List<AppEntry> = emptyList()
         var controlsEnabled: Boolean = true
@@ -173,9 +192,22 @@ class AppRulesActivity : AppCompatActivity() {
                 switchAppEnabled.setOnCheckedChangeListener(null)
                 switchAppEnabled.isChecked = AppRulePreferences.isPackageSelected(entry.info.packageName)
                 switchAppEnabled.isEnabled = controlsEnabled
-                root.alpha = if (controlsEnabled) 1f else 0.55f
+                val contentAlpha = if (controlsEnabled) 1f else 0.55f
+                ivAppIcon.alpha = contentAlpha
+                tvAppName.alpha = contentAlpha
+                tvPackageName.alpha = contentAlpha
+                switchAppEnabled.alpha = contentAlpha
                 switchAppEnabled.setOnCheckedChangeListener { _, checked ->
                     onRuleChanged(entry.info.packageName, checked)
+                }
+                val recognitionRuleCount = recognitionRuleCounts[entry.info.packageName] ?: 0
+                btnRecognitionRules.text = if (recognitionRuleCount == 0) {
+                    getString(R.string.recognition_rules)
+                } else {
+                    getString(R.string.format_recognition_rule_count, recognitionRuleCount)
+                }
+                btnRecognitionRules.setOnClickListener {
+                    onRecognitionRules(entry.info.packageName, entry.label)
                 }
                 root.setOnClickListener {
                     if (controlsEnabled) switchAppEnabled.toggle()

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="rule_features">
+        <item>文本（text）</item>
+        <item>内容描述（contentDescription）</item>
+        <item>控件 ID（View ID）</item>
+        <item>控件类型</item>
+    </string-array>
+    <string-array name="rule_match_modes">
+        <item>精确匹配</item>
+        <item>包含匹配</item>
+        <item>正则匹配</item>
+    </string-array>
+    <string-array name="rule_regions">
+        <item>任意区域</item>
+        <item>上半屏</item>
+        <item>下半屏</item>
+        <item>左半屏</item>
+        <item>右半屏</item>
+        <item>左上</item>
+        <item>右上</item>
+        <item>左下</item>
+        <item>右下</item>
+    </string-array>
+    <string-array name="rule_click_modes">
+        <item>自动（控件点击，失败时坐标点击）</item>
+        <item>仅控件点击</item>
+        <item>仅坐标点击</item>
+    </string-array>
+</resources>

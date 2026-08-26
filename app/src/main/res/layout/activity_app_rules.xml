@@ -71,6 +71,14 @@
                     android:layout_height="wrap_content"
                     android:text="@string/single_click_limit_summary"
                     android:textAppearance="@style/TextAppearance.MaterialComponents.Caption" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_global_recognition_rules"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_normal"
+                    android:text="@string/global_recognition_rules" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

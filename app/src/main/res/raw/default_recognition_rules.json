@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "globalRules": [
+    {
+      "id": "default_text_skip_zh",
+      "enabled": true,
+      "feature": "TEXT",
+      "matchMode": "CONTAINS",
+      "pattern": "跳过",
+      "ignoreCase": true,
+      "region": "RIGHT",
+      "delayMillis": 0,
+      "clickMode": "AUTO"
+    },
+    {
+      "id": "default_text_skip_en",
+      "enabled": true,
+      "feature": "TEXT",
+      "matchMode": "CONTAINS",
+      "pattern": "skip",
+      "ignoreCase": true,
+      "region": "RIGHT",
+      "delayMillis": 0,
+      "clickMode": "AUTO"
+    },
+    {
+      "id": "default_description_skip_zh",
+      "enabled": true,
+      "feature": "CONTENT_DESCRIPTION",
+      "matchMode": "CONTAINS",
+      "pattern": "跳过",
+      "ignoreCase": true,
+      "region": "RIGHT",
+      "delayMillis": 0,
+      "clickMode": "AUTO"
+    },
+    {
+      "id": "default_description_skip_en",
+      "enabled": true,
+      "feature": "CONTENT_DESCRIPTION",
+      "matchMode": "CONTAINS",
+      "pattern": "skip",
+      "ignoreCase": true,
+      "region": "RIGHT",
+      "delayMillis": 0,
+      "clickMode": "AUTO"
+    }
+  ],
+  "applicationRules": {}
+}
