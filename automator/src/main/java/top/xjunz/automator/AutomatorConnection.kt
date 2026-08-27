@@ -16,6 +16,7 @@ import dev.rikka.tools.refine.Refine
 import rikka.shizuku.SystemServiceHelper
 import top.xjunz.automator.model.Result
 import top.xjunz.automator.recognition.LearningCandidate
+import top.xjunz.automator.recognition.RecognitionAttemptPolicy
 import top.xjunz.automator.recognition.RecognitionConfiguration
 import top.xjunz.automator.recognition.RecognitionEngine
 import top.xjunz.automator.recognition.RecognitionRuleCodec
@@ -65,6 +66,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     }
     private val recordLock = Any()
     private var monitoring: Boolean = false
+    private var monitoringGeneration = 0L
     private val ruleLock = Any()
     private var applicationRulesEnabled = true
     private var strictMode = false
@@ -79,6 +81,17 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     private var learningPackageName: String? = null
     private var lastLearningCaptureTimestamp = 0L
     private val learningCandidates = linkedMapOf<String, LearningCandidate>()
+
+    private data class PendingRecognitionAttempt(
+        val token: Long,
+        val generation: Long,
+        val packageName: String,
+        val ruleId: String,
+        var completedAttempts: Int = 0,
+        var unavailableChecks: Int = 0,
+        var fingerprint: RecognitionAttemptPolicy.CandidateFingerprint? = null,
+        var lastResult: Result? = null
+    )
 
     init {
         try {
@@ -140,15 +153,18 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
     }
 
     override fun startMonitoring() {
+        val generation = ++monitoringGeneration
         var distinct = false
         var oldPkgName: String? = null
-        val pendingClickKeys = mutableSetOf<String>()
+        var nextAttemptToken = 0L
+        val activeAttempts = mutableMapOf<String, PendingRecognitionAttempt>()
         uiAutomation.serviceInfo = uiAutomation.serviceInfo.apply {
-            eventTypes = AccessibilityEvent.TYPE_WINDOWS_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            eventTypes = AccessibilityEvent.TYPE_WINDOWS_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
-        checkResult = Result()
 
         fun processResult(result: Result) {
             if (result.passed && distinct) {
@@ -166,14 +182,228 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             }
         }
 
+        fun isAttemptActive(attempt: PendingRecognitionAttempt): Boolean {
+            return monitoring && attempt.generation == monitoringGeneration &&
+                attempt.generation == generation &&
+                activeAttempts[attempt.packageName]?.token == attempt.token
+        }
+
+        fun finishAttempt(attempt: PendingRecognitionAttempt) {
+            if (activeAttempts[attempt.packageName]?.token == attempt.token) {
+                activeAttempts.remove(attempt.packageName)
+            }
+        }
+
+        fun isAttemptAllowed(attempt: PendingRecognitionAttempt): Boolean {
+            return !isLearningPackage(attempt.packageName) &&
+                isPackageEnabled(attempt.packageName) &&
+                !(singleClickLimitEnabled && !distinct)
+        }
+
+        fun confirmAttempt(attempt: PendingRecognitionAttempt) {
+            if (!isAttemptActive(attempt)) return
+            val result = attempt.lastResult ?: run {
+                finishAttempt(attempt)
+                return
+            }
+            finishAttempt(attempt)
+            result.passed = true
+            processResult(result)
+        }
+
+        fun giveUpAttempt(attempt: PendingRecognitionAttempt) {
+            if (!isAttemptActive(attempt)) return
+            attempt.lastResult?.passed = false
+            finishAttempt(attempt)
+            log(
+                "Skip click not confirmed: pkg=${attempt.packageName}, " +
+                    "rule=${attempt.ruleId}, attempts=${attempt.completedAttempts}"
+            )
+        }
+
+        lateinit var executeAttempt: (PendingRecognitionAttempt) -> Unit
+        lateinit var verifyAttempt: (PendingRecognitionAttempt) -> Unit
+
+        fun scheduleExecution(attempt: PendingRecognitionAttempt, delayMillis: Long) {
+            handler.postDelayed({ executeAttempt(attempt) }, delayMillis.coerceAtLeast(0L))
+        }
+
+        fun handleVerificationDecision(
+            attempt: PendingRecognitionAttempt,
+            candidateState: RecognitionAttemptPolicy.CandidateState
+        ) {
+            if (!isAttemptActive(attempt)) return
+            when (RecognitionAttemptPolicy.decide(candidateState, attempt.completedAttempts)) {
+                RecognitionAttemptPolicy.VerificationDecision.CONFIRMED -> confirmAttempt(attempt)
+                RecognitionAttemptPolicy.VerificationDecision.RETRY -> scheduleExecution(
+                    attempt,
+                    RecognitionAttemptPolicy.RETRY_DELAY_MILLIS
+                )
+                RecognitionAttemptPolicy.VerificationDecision.GIVE_UP -> giveUpAttempt(attempt)
+            }
+        }
+
+        verifyAttempt = verify@{ attempt ->
+            if (!isAttemptActive(attempt)) return@verify
+            if (!isAttemptAllowed(attempt)) {
+                finishAttempt(attempt)
+                return@verify
+            }
+            var root: AccessibilityNodeInfo? = null
+            var currentMatch: RecognitionEngine.Match? = null
+            var candidateState = RecognitionAttemptPolicy.CandidateState.UNKNOWN
+            try {
+                val activeRoot = uiAutomation.rootInActiveWindow
+                root = activeRoot
+                val currentPackageName = activeRoot?.packageName?.toString()
+                if (activeRoot != null && currentPackageName != null &&
+                    currentPackageName != attempt.packageName
+                ) {
+                    candidateState = RecognitionAttemptPolicy.CandidateState.GONE
+                } else if (activeRoot != null && currentPackageName != null) {
+                    currentMatch = recognitionEngine.findBestMatch(
+                        activeRoot,
+                        attempt.packageName,
+                        recognitionConfiguration.rulesFor(attempt.packageName),
+                        attempt.ruleId
+                    )
+                    val match = currentMatch
+                    candidateState = if (match == null) {
+                        RecognitionAttemptPolicy.CandidateState.GONE
+                    } else {
+                        val fingerprint = attempt.fingerprint
+                        if (fingerprint != null && fingerprint.matches(
+                                match.rule.id,
+                                match.bounds.left,
+                                match.bounds.top,
+                                match.bounds.right,
+                                match.bounds.bottom
+                            )
+                        ) {
+                            RecognitionAttemptPolicy.CandidateState.PRESENT
+                        } else {
+                            RecognitionAttemptPolicy.CandidateState.GONE
+                        }
+                    }
+                }
+            } catch (t: Throwable) {
+                dumpError(t)
+            } finally {
+                currentMatch?.recycle()
+                root?.recycle()
+            }
+            handleVerificationDecision(attempt, candidateState)
+        }
+
+        executeAttempt = execute@{ attempt ->
+            if (!isAttemptActive(attempt)) return@execute
+            if (!isAttemptAllowed(attempt)) {
+                finishAttempt(attempt)
+                return@execute
+            }
+            var root: AccessibilityNodeInfo? = null
+            var currentMatch: RecognitionEngine.Match? = null
+            try {
+                val activeRoot = uiAutomation.rootInActiveWindow
+                root = activeRoot
+                if (activeRoot == null) {
+                    attempt.unavailableChecks++
+                    if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
+                        scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
+                    } else if (attempt.lastResult != null) {
+                        giveUpAttempt(attempt)
+                    } else {
+                        finishAttempt(attempt)
+                    }
+                    return@execute
+                }
+                val currentPackageName = activeRoot.packageName?.toString()
+                if (currentPackageName == null) {
+                    attempt.unavailableChecks++
+                    if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
+                        scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
+                    } else if (attempt.lastResult != null) {
+                        giveUpAttempt(attempt)
+                    } else {
+                        finishAttempt(attempt)
+                    }
+                    return@execute
+                }
+                if (currentPackageName != attempt.packageName) {
+                    if (attempt.lastResult != null) confirmAttempt(attempt) else finishAttempt(attempt)
+                    return@execute
+                }
+                currentMatch = recognitionEngine.findBestMatch(
+                    activeRoot,
+                    attempt.packageName,
+                    recognitionConfiguration.rulesFor(attempt.packageName),
+                    attempt.ruleId
+                )
+                val match = currentMatch
+                if (match == null) {
+                    if (attempt.lastResult != null) {
+                        confirmAttempt(attempt)
+                    } else {
+                        attempt.unavailableChecks++
+                        if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
+                            scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
+                        } else {
+                            finishAttempt(attempt)
+                        }
+                    }
+                    return@execute
+                }
+                attempt.unavailableChecks = 0
+                attempt.completedAttempts++
+                val outcome = recognitionEngine.execute(match)
+                if (!outcome.successful) {
+                    handleVerificationDecision(
+                        attempt,
+                        RecognitionAttemptPolicy.CandidateState.UNKNOWN
+                    )
+                    return@execute
+                }
+                val result = Result()
+                recognitionEngine.writeResult(match, outcome, result)
+                attempt.lastResult = result
+                attempt.fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
+                    match.rule.id,
+                    match.bounds.left,
+                    match.bounds.top,
+                    match.bounds.right,
+                    match.bounds.bottom
+                )
+                handler.postDelayed(
+                    { verifyAttempt(attempt) },
+                    RecognitionAttemptPolicy.VERIFICATION_DELAY_MILLIS
+                )
+            } catch (t: Throwable) {
+                dumpError(t)
+                handleVerificationDecision(
+                    attempt,
+                    RecognitionAttemptPolicy.CandidateState.UNKNOWN
+                )
+            } finally {
+                currentMatch?.recycle()
+                root?.recycle()
+            }
+        }
+
+        monitoring = true
         uiAutomation.setOnAccessibilityEventListener listener@{ event ->
             var eventSource: AccessibilityNodeInfo? = null
+            var scanRoot: AccessibilityNodeInfo? = null
             try {
                 val packageName = event.packageName?.toString() ?: return@listener
-                if (oldPkgName != packageName) distinct = true
-                oldPkgName = packageName
-                val source = event.source ?: return@listener
-                eventSource = source
+                eventSource = event.source
+                val source = uiAutomation.rootInActiveWindow ?: eventSource ?: return@listener
+                scanRoot = source
+                if (source.packageName?.toString() != packageName) return@listener
+                if (oldPkgName != packageName) {
+                    oldPkgName?.let { activeAttempts.remove(it) }
+                    distinct = true
+                    oldPkgName = packageName
+                }
                 if (isLearningPackage(packageName)) {
                     captureLearningCandidates(source, packageName)
                     return@listener
@@ -190,70 +420,36 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 if (!isPackageEnabled(packageName)) return@listener
                 //when enabled, allow only one injected click during the same foreground session
                 if (singleClickLimitEnabled && !distinct) return@listener
+                if (activeAttempts.containsKey(packageName)) return@listener
                 val rules = recognitionConfiguration.rulesFor(packageName)
                 val match = recognitionEngine.findBestMatch(source, packageName, rules)
                     ?: return@listener
-                val delayMillis = match.rule.delayMillis
-                if (delayMillis > 0) {
-                    val pendingKey = "$packageName:${match.rule.id}"
-                    val ruleId = match.rule.id
-                    match.recycle()
-                    if (!pendingClickKeys.add(pendingKey)) return@listener
-                    handler.postDelayed({
-                        pendingClickKeys.remove(pendingKey)
-                        var root: AccessibilityNodeInfo? = null
-                        var delayedMatch: RecognitionEngine.Match? = null
-                        try {
-                            root = uiAutomation.rootInActiveWindow ?: return@postDelayed
-                            val currentPackageName = root.packageName?.toString() ?: return@postDelayed
-                            if (currentPackageName != packageName || isLearningPackage(packageName)) {
-                                return@postDelayed
-                            }
-                            if (!isPackageEnabled(packageName) ||
-                                (singleClickLimitEnabled && !distinct)
-                            ) {
-                                return@postDelayed
-                            }
-                            delayedMatch = recognitionEngine.findBestMatch(
-                                root,
-                                packageName,
-                                recognitionConfiguration.rulesFor(packageName),
-                                ruleId
-                            ) ?: return@postDelayed
-                            val outcome = recognitionEngine.execute(delayedMatch)
-                            recognitionEngine.writeResult(
-                                delayedMatch,
-                                outcome,
-                                checkResult.apply { reset() }
-                            )
-                            processResult(checkResult)
-                        } catch (t: Throwable) {
-                            checkResult.maskReason(Result.REASON_ERROR)
-                            dumpError(t)
-                        } finally {
-                            delayedMatch?.recycle()
-                            root?.recycle()
-                        }
-                    }, delayMillis)
-                    return@listener
-                }
                 try {
-                    val outcome = recognitionEngine.execute(match)
-                    recognitionEngine.writeResult(match, outcome, checkResult.apply { reset() })
-                    processResult(checkResult)
+                    val attempt = PendingRecognitionAttempt(
+                        token = ++nextAttemptToken,
+                        generation = generation,
+                        packageName = packageName,
+                        ruleId = match.rule.id
+                    )
+                    activeAttempts[packageName] = attempt
+                    val delayMillis = RecognitionAttemptPolicy.initialDelayMillis(
+                        match.rule.delayMillis,
+                        match.clickable,
+                        match.parentClickable
+                    )
+                    scheduleExecution(attempt, delayMillis)
                 } finally {
                     match.recycle()
                 }
             } catch (t: Throwable) {
-                checkResult.maskReason(Result.REASON_ERROR)
                 dumpError(t)
             } finally {
+                if (scanRoot !== eventSource) scanRoot?.recycle()
                 eventSource?.recycle()
                 event.recycle()
             }
         }
         serviceStartTimestamp = System.currentTimeMillis()
-        monitoring = true
         log("The monitoring is started at ${formatCurrentTime()}")
     }
 
@@ -399,11 +595,6 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             skippingCount = count
         }
     }
-
-    /**
-     * A result instance for monitoring to avoid frequent object allocations.
-     */
-    private lateinit var checkResult: Result
 
     /**
      * The hashcode record of the last check [Result].
