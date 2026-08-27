@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.net.Uri
-import top.xjunz.automator.ALIPAY_DONATE_URL
 import top.xjunz.automator.EMAIL_ADDRESS
 import top.xjunz.automator.R
 import top.xjunz.automator.app.AutomatorApp
@@ -18,10 +17,6 @@ import top.xjunz.automator.app.AutomatorApp
 fun viewUrl(context: Activity, url: String) {
     val intent = Intent(Intent.ACTION_VIEW).setData(Uri.parse(url))
     context.startActivity(Intent.createChooser(intent, null))
-}
-
-fun donate(context: Activity) {
-    viewUrl(context, ALIPAY_DONATE_URL)
 }
 
 fun sendMailTo(context: Activity, log: Uri?) {

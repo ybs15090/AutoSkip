@@ -89,6 +89,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         val ruleId: String,
         var completedAttempts: Int = 0,
         var unavailableChecks: Int = 0,
+        var firstClickUptimeMillis: Long = -1L,
         var fingerprint: RecognitionAttemptPolicy.CandidateFingerprint? = null,
         var lastResult: Result? = null
     )
@@ -194,6 +195,15 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             }
         }
 
+        fun elapsedSinceFirstClick(attempt: PendingRecognitionAttempt): Long {
+            val firstClick = attempt.firstClickUptimeMillis
+            return if (firstClick < 0L) {
+                0L
+            } else {
+                (SystemClock.uptimeMillis() - firstClick).coerceAtLeast(0L)
+            }
+        }
+
         fun isAttemptAllowed(attempt: PendingRecognitionAttempt): Boolean {
             return !isLearningPackage(attempt.packageName) &&
                 isPackageEnabled(attempt.packageName) &&
@@ -209,6 +219,11 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             finishAttempt(attempt)
             result.passed = true
             processResult(result)
+            log(
+                "Skip click confirmed: pkg=${attempt.packageName}, rule=${attempt.ruleId}, " +
+                    "attempts=${attempt.completedAttempts}, " +
+                    "elapsed=${elapsedSinceFirstClick(attempt)}ms"
+            )
         }
 
         fun giveUpAttempt(attempt: PendingRecognitionAttempt) {
@@ -217,82 +232,41 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             finishAttempt(attempt)
             log(
                 "Skip click not confirmed: pkg=${attempt.packageName}, " +
-                    "rule=${attempt.ruleId}, attempts=${attempt.completedAttempts}"
+                    "rule=${attempt.ruleId}, attempts=${attempt.completedAttempts}, " +
+                    "elapsed=${elapsedSinceFirstClick(attempt)}ms"
             )
         }
 
         lateinit var executeAttempt: (PendingRecognitionAttempt) -> Unit
-        lateinit var verifyAttempt: (PendingRecognitionAttempt) -> Unit
 
         fun scheduleExecution(attempt: PendingRecognitionAttempt, delayMillis: Long) {
             handler.postDelayed({ executeAttempt(attempt) }, delayMillis.coerceAtLeast(0L))
         }
 
-        fun handleVerificationDecision(
-            attempt: PendingRecognitionAttempt,
-            candidateState: RecognitionAttemptPolicy.CandidateState
-        ) {
+        fun handleUnavailableCandidate(attempt: PendingRecognitionAttempt) {
             if (!isAttemptActive(attempt)) return
-            when (RecognitionAttemptPolicy.decide(candidateState, attempt.completedAttempts)) {
-                RecognitionAttemptPolicy.VerificationDecision.CONFIRMED -> confirmAttempt(attempt)
+            if (attempt.firstClickUptimeMillis < 0L) {
+                attempt.unavailableChecks++
+                if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
+                    scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_INTERVAL_MILLIS)
+                } else {
+                    finishAttempt(attempt)
+                }
+                return
+            }
+            when (RecognitionAttemptPolicy.decide(
+                RecognitionAttemptPolicy.CandidateState.UNKNOWN,
+                attempt.completedAttempts,
+                elapsedSinceFirstClick(attempt)
+            )) {
+                RecognitionAttemptPolicy.VerificationDecision.WAIT,
                 RecognitionAttemptPolicy.VerificationDecision.RETRY -> scheduleExecution(
                     attempt,
-                    RecognitionAttemptPolicy.RETRY_DELAY_MILLIS
+                    RecognitionAttemptPolicy.RETRY_INTERVAL_MILLIS
                 )
                 RecognitionAttemptPolicy.VerificationDecision.GIVE_UP -> giveUpAttempt(attempt)
+                RecognitionAttemptPolicy.VerificationDecision.CONFIRMED -> confirmAttempt(attempt)
             }
-        }
-
-        verifyAttempt = verify@{ attempt ->
-            if (!isAttemptActive(attempt)) return@verify
-            if (!isAttemptAllowed(attempt)) {
-                finishAttempt(attempt)
-                return@verify
-            }
-            var root: AccessibilityNodeInfo? = null
-            var currentMatch: RecognitionEngine.Match? = null
-            var candidateState = RecognitionAttemptPolicy.CandidateState.UNKNOWN
-            try {
-                val activeRoot = uiAutomation.rootInActiveWindow
-                root = activeRoot
-                val currentPackageName = activeRoot?.packageName?.toString()
-                if (activeRoot != null && currentPackageName != null &&
-                    currentPackageName != attempt.packageName
-                ) {
-                    candidateState = RecognitionAttemptPolicy.CandidateState.GONE
-                } else if (activeRoot != null && currentPackageName != null) {
-                    currentMatch = recognitionEngine.findBestMatch(
-                        activeRoot,
-                        attempt.packageName,
-                        recognitionConfiguration.rulesFor(attempt.packageName),
-                        attempt.ruleId
-                    )
-                    val match = currentMatch
-                    candidateState = if (match == null) {
-                        RecognitionAttemptPolicy.CandidateState.GONE
-                    } else {
-                        val fingerprint = attempt.fingerprint
-                        if (fingerprint != null && fingerprint.matches(
-                                match.rule.id,
-                                match.bounds.left,
-                                match.bounds.top,
-                                match.bounds.right,
-                                match.bounds.bottom
-                            )
-                        ) {
-                            RecognitionAttemptPolicy.CandidateState.PRESENT
-                        } else {
-                            RecognitionAttemptPolicy.CandidateState.GONE
-                        }
-                    }
-                }
-            } catch (t: Throwable) {
-                dumpError(t)
-            } finally {
-                currentMatch?.recycle()
-                root?.recycle()
-            }
-            handleVerificationDecision(attempt, candidateState)
         }
 
         executeAttempt = execute@{ attempt ->
@@ -307,30 +281,16 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 val activeRoot = uiAutomation.rootInActiveWindow
                 root = activeRoot
                 if (activeRoot == null) {
-                    attempt.unavailableChecks++
-                    if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
-                        scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
-                    } else if (attempt.lastResult != null) {
-                        giveUpAttempt(attempt)
-                    } else {
-                        finishAttempt(attempt)
-                    }
+                    handleUnavailableCandidate(attempt)
                     return@execute
                 }
                 val currentPackageName = activeRoot.packageName?.toString()
                 if (currentPackageName == null) {
-                    attempt.unavailableChecks++
-                    if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
-                        scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
-                    } else if (attempt.lastResult != null) {
-                        giveUpAttempt(attempt)
-                    } else {
-                        finishAttempt(attempt)
-                    }
+                    handleUnavailableCandidate(attempt)
                     return@execute
                 }
                 if (currentPackageName != attempt.packageName) {
-                    if (attempt.lastResult != null) confirmAttempt(attempt) else finishAttempt(attempt)
+                    confirmAttempt(attempt)
                     return@execute
                 }
                 currentMatch = recognitionEngine.findBestMatch(
@@ -341,48 +301,78 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 )
                 val match = currentMatch
                 if (match == null) {
-                    if (attempt.lastResult != null) {
+                    if (attempt.firstClickUptimeMillis >= 0L) {
                         confirmAttempt(attempt)
                     } else {
-                        attempt.unavailableChecks++
-                        if (attempt.unavailableChecks < RecognitionAttemptPolicy.MAX_UNAVAILABLE_CHECKS) {
-                            scheduleExecution(attempt, RecognitionAttemptPolicy.RETRY_DELAY_MILLIS)
-                        } else {
-                            finishAttempt(attempt)
-                        }
+                        handleUnavailableCandidate(attempt)
                     }
                     return@execute
                 }
                 attempt.unavailableChecks = 0
+                val fingerprint = attempt.fingerprint
+                if (fingerprint != null) {
+                    val candidateState = if (fingerprint.matches(
+                            match.rule.id,
+                            match.windowId,
+                            match.bounds.left,
+                            match.bounds.top,
+                            match.bounds.right,
+                            match.bounds.bottom
+                        )
+                    ) {
+                        RecognitionAttemptPolicy.CandidateState.PRESENT
+                    } else {
+                        RecognitionAttemptPolicy.CandidateState.GONE
+                    }
+                    when (RecognitionAttemptPolicy.decide(
+                        candidateState,
+                        attempt.completedAttempts,
+                        elapsedSinceFirstClick(attempt)
+                    )) {
+                        RecognitionAttemptPolicy.VerificationDecision.CONFIRMED -> {
+                            confirmAttempt(attempt)
+                            return@execute
+                        }
+                        RecognitionAttemptPolicy.VerificationDecision.GIVE_UP -> {
+                            giveUpAttempt(attempt)
+                            return@execute
+                        }
+                        RecognitionAttemptPolicy.VerificationDecision.WAIT -> {
+                            scheduleExecution(
+                                attempt,
+                                RecognitionAttemptPolicy.RETRY_INTERVAL_MILLIS
+                            )
+                            return@execute
+                        }
+                        RecognitionAttemptPolicy.VerificationDecision.RETRY -> Unit
+                    }
+                } else {
+                    attempt.fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
+                        match.rule.id,
+                        match.windowId,
+                        match.bounds.left,
+                        match.bounds.top,
+                        match.bounds.right,
+                        match.bounds.bottom
+                    )
+                }
+                if (attempt.firstClickUptimeMillis < 0L) {
+                    attempt.firstClickUptimeMillis = SystemClock.uptimeMillis()
+                }
                 attempt.completedAttempts++
                 val outcome = recognitionEngine.execute(match)
-                if (!outcome.successful) {
-                    handleVerificationDecision(
-                        attempt,
-                        RecognitionAttemptPolicy.CandidateState.UNKNOWN
-                    )
-                    return@execute
+                if (outcome.successful) {
+                    val result = Result()
+                    recognitionEngine.writeResult(match, outcome, result)
+                    attempt.lastResult = result
                 }
-                val result = Result()
-                recognitionEngine.writeResult(match, outcome, result)
-                attempt.lastResult = result
-                attempt.fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
-                    match.rule.id,
-                    match.bounds.left,
-                    match.bounds.top,
-                    match.bounds.right,
-                    match.bounds.bottom
-                )
-                handler.postDelayed(
-                    { verifyAttempt(attempt) },
-                    RecognitionAttemptPolicy.VERIFICATION_DELAY_MILLIS
+                scheduleExecution(
+                    attempt,
+                    RecognitionAttemptPolicy.RETRY_INTERVAL_MILLIS
                 )
             } catch (t: Throwable) {
                 dumpError(t)
-                handleVerificationDecision(
-                    attempt,
-                    RecognitionAttemptPolicy.CandidateState.UNKNOWN
-                )
+                handleUnavailableCandidate(attempt)
             } finally {
                 currentMatch?.recycle()
                 root?.recycle()
@@ -400,7 +390,9 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 scanRoot = source
                 if (source.packageName?.toString() != packageName) return@listener
                 if (oldPkgName != packageName) {
-                    oldPkgName?.let { activeAttempts.remove(it) }
+                    oldPkgName?.let { previousPackageName ->
+                        activeAttempts[previousPackageName]?.let(::confirmAttempt)
+                    }
                     distinct = true
                     oldPkgName = packageName
                 }
@@ -429,7 +421,15 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                         token = ++nextAttemptToken,
                         generation = generation,
                         packageName = packageName,
-                        ruleId = match.rule.id
+                        ruleId = match.rule.id,
+                        fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
+                            match.rule.id,
+                            match.windowId,
+                            match.bounds.left,
+                            match.bounds.top,
+                            match.bounds.right,
+                            match.bounds.bottom
+                        )
                     )
                     activeAttempts[packageName] = attempt
                     val delayMillis = RecognitionAttemptPolicy.initialDelayMillis(

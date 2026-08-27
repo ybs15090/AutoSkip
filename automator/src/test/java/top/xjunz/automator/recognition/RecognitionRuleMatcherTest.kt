@@ -92,19 +92,25 @@ class RecognitionRuleMatcherTest {
     }
 
     @Test
-    fun applicationRulesOverrideGlobalRulesAndDisabledRulesStayDisabled() {
+    fun applicationOverridesCanBePausedWithoutDeletingTheirRules() {
         val global = rule(pattern = "跳过", mode = RuleMatchMode.CONTAINS)
         val application = rule(pattern = "关闭广告", mode = RuleMatchMode.EXACT)
         val configuration = RecognitionConfiguration(
             globalRules = listOf(global),
             applicationRules = mapOf(
                 "com.example.custom" to listOf(application),
-                "com.example.disabled" to listOf(application.copy(enabled = false))
-            )
+                "com.example.paused" to listOf(application),
+                "com.example.rule-disabled" to listOf(application.copy(enabled = false))
+            ),
+            disabledApplicationRulePackages = setOf("com.example.paused")
         )
         assertEquals(listOf(global), configuration.rulesFor("com.example.default"))
         assertEquals(listOf(application), configuration.rulesFor("com.example.custom"))
-        assertTrue(configuration.rulesFor("com.example.disabled").isEmpty())
+        assertTrue(configuration.isApplicationOverrideEnabled("com.example.custom"))
+        assertEquals(listOf(global), configuration.rulesFor("com.example.paused"))
+        assertTrue(configuration.hasApplicationRules("com.example.paused"))
+        assertFalse(configuration.isApplicationOverrideEnabled("com.example.paused"))
+        assertTrue(configuration.rulesFor("com.example.rule-disabled").isEmpty())
     }
 
     private fun rule(pattern: String, mode: RuleMatchMode) = RecognitionRule(

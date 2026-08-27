@@ -5,10 +5,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.DialogFragment
-import top.xjunz.automator.APP_DOWNLOAD_URL
 import top.xjunz.automator.R
 import top.xjunz.automator.databinding.FragmentAboutBinding
-import top.xjunz.automator.util.donate
 import top.xjunz.automator.util.myIcon
 import top.xjunz.automator.util.viewUrl
 
@@ -37,12 +35,16 @@ class AboutFragment : DialogFragment() {
             binding.ivIcon.setImageResource(R.mipmap.ic_launcher)
         }
         binding.btnDonate.setOnClickListener {
-            donate(requireActivity())
+            viewUrl(requireActivity(), ALIPAY_COLLECTION_URL)
         }
         binding.btnUpdate.setOnClickListener {
-            viewUrl(requireActivity(), APP_DOWNLOAD_URL)
+            viewUrl(requireActivity(), RELEASES_URL)
         }
     }
 
-
+    companion object {
+        private const val ALIPAY_COLLECTION_URL =
+            "https://qr.alipay.com/fkx18887vblygfjtakkmu72"
+        private const val RELEASES_URL = "https://github.com/ybs15090/AutoSkip/releases"
+    }
 }

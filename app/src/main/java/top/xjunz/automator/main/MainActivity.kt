@@ -116,6 +116,7 @@ class MainActivity : AppCompatActivity() {
                         this@MainActivity,
                         "https://github.com/xjunz/AutoSkip/issues"
                     )
+                    R.id.item_working_principle -> showWorkingPrinciple()
                     R.id.item_about -> AboutFragment().show(supportFragmentManager, "about")
                 }
                 true
@@ -443,6 +444,14 @@ class MainActivity : AppCompatActivity() {
         popupMenu.menu.findItem(R.id.item_auto_start).isChecked = isAutoStartEnabled()
         popupMenu.menu.findItem(R.id.item_test).isEnabled = viewModel.isRunning.value == true
         popupMenu.show()
+    }
+
+    private fun showWorkingPrinciple() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.working_principle)
+            .setMessage(R.string.working_principle_content)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun setAutoStartEnabled(enabled: Boolean) {

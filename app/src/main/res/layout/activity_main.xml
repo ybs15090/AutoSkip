@@ -3,6 +3,11 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <data>
+
+        <import type="android.text.method.LinkMovementMethod" />
+    </data>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -298,6 +303,41 @@
                             android:layout_centerVertical="true"
                             android:contentDescription="@string/enter"
                             android:src="@drawable/ic_baseline_chevron_right_24" />
+                    </RelativeLayout>
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_unit"
+                        android:background="@drawable/bg_option_frame"
+                        android:padding="16dp">
+
+                        <ImageView
+                            android:id="@+id/iv_more"
+                            style="@style/TintedIcon.Main"
+                            android:layout_alignTop="@id/tv_more"
+                            android:layout_marginTop="4dp"
+                            android:src="@drawable/ic_baseline_more_horiz_24" />
+
+                        <TextView
+                            android:id="@+id/tv_more"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="16dp"
+                            android:layout_toEndOf="@id/iv_more"
+                            android:text="@string/about"
+                            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1" />
+
+                        <TextView
+                            android:id="@+id/tv_caption_more"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/tv_more"
+                            android:layout_marginStart="16dp"
+                            android:layout_marginTop="@dimen/spacing_unit"
+                            android:layout_toEndOf="@id/iv_more"
+                            android:movementMethod="@{LinkMovementMethod.getInstance()}"
+                            android:text="@string/more_to_say" />
                     </RelativeLayout>
                 </LinearLayout>
 

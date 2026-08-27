@@ -54,12 +54,29 @@ data class RecognitionRule(
 
 data class RecognitionConfiguration(
     val globalRules: List<RecognitionRule> = emptyList(),
-    val applicationRules: Map<String, List<RecognitionRule>> = emptyMap()
+    val applicationRules: Map<String, List<RecognitionRule>> = emptyMap(),
+    val disabledApplicationRulePackages: Set<String> = emptySet()
 ) {
+    fun hasApplicationRules(packageName: String): Boolean {
+        return applicationRules[packageName]?.isNotEmpty() == true
+    }
+
+    fun isApplicationOverrideEnabled(packageName: String): Boolean {
+        return hasApplicationRules(packageName) &&
+            packageName !in disabledApplicationRulePackages
+    }
+
     fun rulesFor(packageName: String): List<RecognitionRule> {
         val specificRules = applicationRules[packageName]
-        return (if (specificRules.isNullOrEmpty()) globalRules else specificRules)
-            .asSequence()
+        val selectedRules = if (
+            specificRules.isNullOrEmpty() ||
+            packageName in disabledApplicationRulePackages
+        ) {
+            globalRules
+        } else {
+            specificRules
+        }
+        return selectedRules.asSequence()
             .filter { it.enabled && it.pattern.isNotBlank() }
             .toList()
     }

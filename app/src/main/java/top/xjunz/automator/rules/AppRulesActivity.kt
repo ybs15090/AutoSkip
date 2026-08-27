@@ -33,6 +33,7 @@ class AppRulesActivity : AppCompatActivity() {
     )
     private var installedApps = emptyList<AppEntry>()
     private var recognitionRuleCounts = emptyMap<String, Int>()
+    private var disabledRecognitionRulePackages = emptySet<String>()
     private var updatingSwitches = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,8 +54,10 @@ class AppRulesActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        recognitionRuleCounts = RecognitionRulePreferences.snapshot().applicationRules
+        val recognitionConfiguration = RecognitionRulePreferences.snapshot()
+        recognitionRuleCounts = recognitionConfiguration.applicationRules
             .mapValues { it.value.size }
+        disabledRecognitionRulePackages = recognitionConfiguration.disabledApplicationRulePackages
         if (appAdapter.itemCount > 0) {
             appAdapter.notifyItemRangeChanged(0, appAdapter.itemCount)
         }
@@ -201,10 +204,13 @@ class AppRulesActivity : AppCompatActivity() {
                     onRuleChanged(entry.info.packageName, checked)
                 }
                 val recognitionRuleCount = recognitionRuleCounts[entry.info.packageName] ?: 0
-                btnRecognitionRules.text = if (recognitionRuleCount == 0) {
-                    getString(R.string.recognition_rules)
-                } else {
-                    getString(R.string.format_recognition_rule_count, recognitionRuleCount)
+                btnRecognitionRules.text = when {
+                    recognitionRuleCount == 0 -> getString(R.string.recognition_rules)
+                    entry.info.packageName in disabledRecognitionRulePackages -> getString(
+                        R.string.format_disabled_recognition_rule_count,
+                        recognitionRuleCount
+                    )
+                    else -> getString(R.string.format_recognition_rule_count, recognitionRuleCount)
                 }
                 btnRecognitionRules.setOnClickListener {
                     onRecognitionRules(entry.info.packageName, entry.label)

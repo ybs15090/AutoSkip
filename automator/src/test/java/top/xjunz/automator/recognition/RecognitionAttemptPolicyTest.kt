@@ -39,44 +39,88 @@ class RecognitionAttemptPolicyTest {
     fun fingerprintToleratesSmallLayoutMovementButRejectsAnotherCandidate() {
         val fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
             ruleId = "skip",
+            windowId = 7,
             left = 230,
             top = 164,
             right = 315,
             bottom = 219
         )
-        assertTrue(fingerprint.matches("skip", 236, 168, 321, 223))
-        assertFalse(fingerprint.matches("close", 236, 168, 321, 223))
-        assertFalse(fingerprint.matches("skip", 600, 164, 685, 219))
+        assertTrue(fingerprint.matches("skip", 7, 236, 168, 321, 223))
+        assertFalse(fingerprint.matches("skip", 8, 236, 168, 321, 223))
+        assertFalse(fingerprint.matches("close", 7, 236, 168, 321, 223))
+        assertFalse(fingerprint.matches("skip", 7, 600, 164, 685, 219))
     }
 
     @Test
-    fun verificationConfirmsDisappearanceAndBoundsRetries() {
+    fun verificationRetriesEveryTwoHundredMillisecondsAndStopsAtBounds() {
+        assertEquals(200L, RecognitionAttemptPolicy.RETRY_INTERVAL_MILLIS)
+        assertEquals(20, RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS)
+        assertEquals(4_000L, RecognitionAttemptPolicy.MAX_ATTEMPT_DURATION_MILLIS)
         assertEquals(
             RecognitionAttemptPolicy.VerificationDecision.CONFIRMED,
             RecognitionAttemptPolicy.decide(
                 RecognitionAttemptPolicy.CandidateState.GONE,
-                completedAttempts = 1
+                completedAttempts = 1,
+                elapsedSinceFirstClickMillis = 200L
             )
         )
         assertEquals(
             RecognitionAttemptPolicy.VerificationDecision.RETRY,
             RecognitionAttemptPolicy.decide(
                 RecognitionAttemptPolicy.CandidateState.PRESENT,
-                completedAttempts = 1
+                completedAttempts = 1,
+                elapsedSinceFirstClickMillis = 200L
+            )
+        )
+        assertEquals(
+            RecognitionAttemptPolicy.VerificationDecision.WAIT,
+            RecognitionAttemptPolicy.decide(
+                RecognitionAttemptPolicy.CandidateState.UNKNOWN,
+                completedAttempts = 1,
+                elapsedSinceFirstClickMillis = 200L
             )
         )
         assertEquals(
             RecognitionAttemptPolicy.VerificationDecision.RETRY,
             RecognitionAttemptPolicy.decide(
-                RecognitionAttemptPolicy.CandidateState.UNKNOWN,
-                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS - 1
+                RecognitionAttemptPolicy.CandidateState.PRESENT,
+                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS - 1,
+                elapsedSinceFirstClickMillis = 3_800L
             )
         )
         assertEquals(
             RecognitionAttemptPolicy.VerificationDecision.GIVE_UP,
             RecognitionAttemptPolicy.decide(
                 RecognitionAttemptPolicy.CandidateState.PRESENT,
-                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS
+                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS,
+                elapsedSinceFirstClickMillis = 3_800L
+            )
+        )
+        assertEquals(
+            RecognitionAttemptPolicy.VerificationDecision.GIVE_UP,
+            RecognitionAttemptPolicy.decide(
+                RecognitionAttemptPolicy.CandidateState.PRESENT,
+                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS - 1,
+                elapsedSinceFirstClickMillis =
+                    RecognitionAttemptPolicy.MAX_ATTEMPT_DURATION_MILLIS
+            )
+        )
+        assertEquals(
+            RecognitionAttemptPolicy.VerificationDecision.GIVE_UP,
+            RecognitionAttemptPolicy.decide(
+                RecognitionAttemptPolicy.CandidateState.UNKNOWN,
+                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS - 1,
+                elapsedSinceFirstClickMillis =
+                    RecognitionAttemptPolicy.MAX_ATTEMPT_DURATION_MILLIS
+            )
+        )
+        assertEquals(
+            RecognitionAttemptPolicy.VerificationDecision.CONFIRMED,
+            RecognitionAttemptPolicy.decide(
+                RecognitionAttemptPolicy.CandidateState.GONE,
+                completedAttempts = RecognitionAttemptPolicy.MAX_CLICK_ATTEMPTS,
+                elapsedSinceFirstClickMillis =
+                    RecognitionAttemptPolicy.MAX_ATTEMPT_DURATION_MILLIS
             )
         )
     }

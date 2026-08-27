@@ -77,7 +77,6 @@ class RecognitionRulesActivity : AppCompatActivity() {
             binding.btnSecondaryAction.setOnClickListener { confirmRestoreDefaults() }
         } else {
             binding.toolbar.title = appLabel
-            binding.tvScopeSummary.text = getString(R.string.format_app_rules_summary, appLabel)
             binding.btnLearning.visibility = View.VISIBLE
             binding.btnLearning.setOnClickListener { explainLearningMode() }
         }
@@ -86,18 +85,38 @@ class RecognitionRulesActivity : AppCompatActivity() {
     private fun refreshRules() {
         val rules = RecognitionRulePreferences.rulesForEditor(packageNameForRules)
         ruleAdapter.submitItems(rules)
-        val applicationOverride = packageNameForRules?.let {
-            RecognitionRulePreferences.hasApplicationOverride(it)
-        } == true
         binding.tvEmptyRules.visibility = if (rules.isEmpty()) View.VISIBLE else View.GONE
         binding.tvEmptyRules.setText(
             if (packageNameForRules == null) R.string.no_recognition_rules
             else R.string.application_inherits_global_rules
         )
-        if (packageNameForRules != null) {
-            binding.btnSecondaryAction.visibility = if (applicationOverride) View.VISIBLE else View.GONE
-            binding.btnSecondaryAction.setText(R.string.use_global_rules)
-            binding.btnSecondaryAction.setOnClickListener { confirmUseGlobalRules() }
+        val applicationPackage = packageNameForRules
+        if (applicationPackage != null) {
+            val hasApplicationRules = RecognitionRulePreferences.hasApplicationRules(
+                applicationPackage
+            )
+            val applicationOverrideEnabled = RecognitionRulePreferences
+                .isApplicationOverrideEnabled(applicationPackage)
+            binding.tvScopeSummary.text = when {
+                !hasApplicationRules -> getString(R.string.application_inherits_global_rules)
+                applicationOverrideEnabled -> getString(
+                    R.string.format_app_rules_summary,
+                    appLabel
+                )
+                else -> getString(R.string.format_disabled_app_rules_summary, appLabel)
+            }
+            binding.btnSecondaryAction.visibility = if (hasApplicationRules) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            if (applicationOverrideEnabled) {
+                binding.btnSecondaryAction.setText(R.string.use_global_rules)
+                binding.btnSecondaryAction.setOnClickListener { confirmUseGlobalRules() }
+            } else {
+                binding.btnSecondaryAction.setText(R.string.enable_application_rules)
+                binding.btnSecondaryAction.setOnClickListener { enableApplicationRules() }
+            }
         }
     }
 
@@ -145,13 +164,21 @@ class RecognitionRulesActivity : AppCompatActivity() {
         val packageName = packageNameForRules ?: return
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.use_global_rules_title)
+            .setMessage(R.string.use_global_rules_message)
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.use_global_rules) { _, _ ->
-                RecognitionRulePreferences.removeApplicationOverride(packageName)
+                RecognitionRulePreferences.setApplicationOverrideEnabled(packageName, false)
                 viewModel.syncRuleConfiguration()
                 refreshRules()
             }
             .show()
+    }
+
+    private fun enableApplicationRules() {
+        val packageName = packageNameForRules ?: return
+        RecognitionRulePreferences.setApplicationOverrideEnabled(packageName, true)
+        viewModel.syncRuleConfiguration()
+        refreshRules()
     }
 
     private fun showRuleEditor(rule: RecognitionRule?, learned: Boolean = false) {

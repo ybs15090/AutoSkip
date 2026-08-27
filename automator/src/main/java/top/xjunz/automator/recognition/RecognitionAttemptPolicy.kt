@@ -11,16 +11,17 @@ import kotlin.math.abs
  */
 internal object RecognitionAttemptPolicy {
 
-    const val MAX_CLICK_ATTEMPTS = 4
+    const val MAX_CLICK_ATTEMPTS = 20
     const val MAX_UNAVAILABLE_CHECKS = 6
     const val NON_CLICKABLE_INITIAL_DELAY_MILLIS = 300L
-    const val VERIFICATION_DELAY_MILLIS = 600L
-    const val RETRY_DELAY_MILLIS = 400L
+    const val RETRY_INTERVAL_MILLIS = 200L
+    const val MAX_ATTEMPT_DURATION_MILLIS = 4_000L
 
     private const val CENTER_TOLERANCE_PIXELS = 32
 
     data class CandidateFingerprint(
         val ruleId: String,
+        val windowId: Int,
         val left: Int,
         val top: Int,
         val right: Int,
@@ -28,12 +29,13 @@ internal object RecognitionAttemptPolicy {
     ) {
         fun matches(
             actualRuleId: String,
+            actualWindowId: Int,
             actualLeft: Int,
             actualTop: Int,
             actualRight: Int,
             actualBottom: Int
         ): Boolean {
-            if (ruleId != actualRuleId) return false
+            if (ruleId != actualRuleId || windowId != actualWindowId) return false
             val expectedCenterX = left + right
             val expectedCenterY = top + bottom
             val actualCenterX = actualLeft + actualRight
@@ -52,6 +54,7 @@ internal object RecognitionAttemptPolicy {
     enum class VerificationDecision {
         CONFIRMED,
         RETRY,
+        WAIT,
         GIVE_UP
     }
 
@@ -70,15 +73,21 @@ internal object RecognitionAttemptPolicy {
 
     fun decide(
         candidateState: CandidateState,
-        completedAttempts: Int
+        completedAttempts: Int,
+        elapsedSinceFirstClickMillis: Long
     ): VerificationDecision {
         if (candidateState == CandidateState.GONE) {
             return VerificationDecision.CONFIRMED
         }
-        return if (completedAttempts < MAX_CLICK_ATTEMPTS) {
-            VerificationDecision.RETRY
-        } else {
-            VerificationDecision.GIVE_UP
+        if (completedAttempts >= MAX_CLICK_ATTEMPTS ||
+            elapsedSinceFirstClickMillis >= MAX_ATTEMPT_DURATION_MILLIS
+        ) {
+            return VerificationDecision.GIVE_UP
+        }
+        return when (candidateState) {
+            CandidateState.PRESENT -> VerificationDecision.RETRY
+            CandidateState.UNKNOWN -> VerificationDecision.WAIT
+            CandidateState.GONE -> VerificationDecision.CONFIRMED
         }
     }
 }

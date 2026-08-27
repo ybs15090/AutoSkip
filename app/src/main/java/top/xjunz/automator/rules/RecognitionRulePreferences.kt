@@ -60,8 +60,12 @@ object RecognitionRulePreferences {
         }
     }
 
-    fun hasApplicationOverride(packageName: String): Boolean {
-        return snapshot().applicationRules[packageName]?.isNotEmpty() == true
+    fun hasApplicationRules(packageName: String): Boolean {
+        return snapshot().hasApplicationRules(packageName)
+    }
+
+    fun isApplicationOverrideEnabled(packageName: String): Boolean {
+        return snapshot().isApplicationOverrideEnabled(packageName)
     }
 
     fun saveRules(packageName: String?, rules: List<RecognitionRule>) {
@@ -70,12 +74,20 @@ object RecognitionRulePreferences {
             current.copy(globalRules = rules.map(RecognitionRule::normalized))
         } else {
             val applicationRules = current.applicationRules.toMutableMap()
+            val disabledPackages = current.disabledApplicationRulePackages.toMutableSet()
             if (rules.isEmpty()) {
                 applicationRules.remove(packageName)
+                disabledPackages.remove(packageName)
             } else {
+                if (!current.hasApplicationRules(packageName)) {
+                    disabledPackages.remove(packageName)
+                }
                 applicationRules[packageName] = rules.map(RecognitionRule::normalized)
             }
-            current.copy(applicationRules = applicationRules)
+            current.copy(
+                applicationRules = applicationRules,
+                disabledApplicationRulePackages = disabledPackages
+            )
         }
         persist(next)
     }
@@ -86,8 +98,16 @@ object RecognitionRulePreferences {
         persist(current.copy(globalRules = defaults.globalRules))
     }
 
-    fun removeApplicationOverride(packageName: String) {
-        saveRules(packageName, emptyList())
+    fun setApplicationOverrideEnabled(packageName: String, enabled: Boolean) {
+        val current = snapshot()
+        if (!current.hasApplicationRules(packageName)) return
+        val disabledPackages = current.disabledApplicationRulePackages.toMutableSet()
+        if (enabled) {
+            disabledPackages.remove(packageName)
+        } else {
+            disabledPackages.add(packageName)
+        }
+        persist(current.copy(disabledApplicationRulePackages = disabledPackages))
     }
 
     private fun persist(configuration: RecognitionConfiguration) {

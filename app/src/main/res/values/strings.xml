@@ -5,9 +5,12 @@
     <string name="intro_m_restriction">由于系统限制，在Android 6.0中，本应用与无障碍服务冲突。
         在服务启动之后，无障碍服务将会结束运行；并且在停止服务之后，无障碍服务才会重新启动。</string>
     <string name="more">更多</string>
+    <string name="working_principle">工作原理</string>
+    <string name="working_principle_content">AutoSkip 不拦截网络广告，而是在广告界面出现后识别控件并执行点击。\n\n1. 界面监听：获得 Shizuku 授权后，特权服务通过 Android UiAutomation 监听当前窗口及内容变化。\n\n2. 元素识别：读取可见且不可编辑控件的文字、内容描述、View ID 和控件类型，再按全局规则或当前应用已启用的专属规则进行精确、包含或正则匹配，并限制候选所在区域。\n\n3. 候选评分：多个控件同时匹配时，综合文字匹配程度、位置、控件大小、是否可点击以及父控件是否可点击，选择得分最高的候选。\n\n4. 动作执行：按照规则延迟重新确认候选，优先执行无障碍点击；无法直接点击时尝试可点击父控件或坐标点击。点击后还会确认目标是否消失，必要时进行有限重试。\n\n5. 数据与限制：规则和跳过记录保存在本机。网页画布、视频画面、系统安全窗口或未暴露界面元素的广告可能无法识别。</string>
     <string name="format_running_duration">已运行 %1$02d:%2$02d:%3$02d</string>
     <string name="format_running_duration_no_auto_restore">已运行 %1$02d:%2$02d:%3$02d · 开机自动恢复未开启</string>
     <string name="about">关于</string>
+    <string name="more_to_say">本应用通过 Shizuku 和 UiAutomation 帮助您跳过应用的启动广告或宣传页。\n\n它无需开启系统无障碍服务，不需要常驻通知，并支持开机自动恢复。规则与跳过记录均保存在本机。\n\n本应用是<a href='automator://about'>开源</a>应用，您可以查看版本、许可和支持方式。</string>
     <string name="settings">设置</string>
     <string name="statistics">统计数据</string>
     <string name="format_total_count">累计已跳过 %d 次</string>
@@ -89,8 +92,10 @@
     <string name="global_recognition_rules">全局识别规则</string>
     <string name="global_rules_summary">没有单独配置的应用使用这些全局规则。多个候选同时出现时，系统会按文字匹配、位置、大小和可点击性评分。</string>
     <string name="format_app_rules_summary">“%s”的专属规则会覆盖全局规则。</string>
-    <string name="application_inherits_global_rules">当前没有专属规则，自动继承全局规则。</string>
+    <string name="application_inherits_global_rules">当前没有专属规则，自动使用全局规则。</string>
+    <string name="format_disabled_app_rules_summary">当前使用全局规则。“%s”的专属规则已保留，但暂不生效。</string>
     <string name="format_recognition_rule_count">规则 %d 条</string>
+    <string name="format_disabled_recognition_rule_count">规则 %d 条（已停用）</string>
     <string name="add_rule">新增规则</string>
     <string name="edit_rule">编辑规则</string>
     <string name="edit">编辑</string>
@@ -99,7 +104,9 @@
     <string name="restore_default_rules">恢复默认</string>
     <string name="restore_default_rules_title">恢复默认全局规则？</string>
     <string name="use_global_rules">改用全局规则</string>
-    <string name="use_global_rules_title">删除该应用的专属规则并改用全局规则？</string>
+    <string name="use_global_rules_title">停用该应用的专属规则并改用全局规则？</string>
+    <string name="use_global_rules_message">现有专属规则会完整保留，之后可以随时重新启用。</string>
+    <string name="enable_application_rules">启用专属规则</string>
     <string name="rule_pattern">关键词或正则表达式</string>
     <string name="rule_feature">识别特征</string>
     <string name="match_mode">匹配方式</string>
