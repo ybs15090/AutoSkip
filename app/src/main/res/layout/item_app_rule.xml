@@ -30,7 +30,7 @@
             android:ellipsize="end"
             android:maxLines="1"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle1"
-            app:layout_constraintEnd_toStartOf="@id/switch_app_enabled"
+            app:layout_constraintEnd_toStartOf="@id/btn_recognition_rules"
             app:layout_constraintStart_toEndOf="@id/iv_app_icon"
             app:layout_constraintTop_toTopOf="@id/iv_app_icon"
             tools:text="示例应用" />
@@ -52,17 +52,23 @@
             style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="@dimen/spacing_small"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:minWidth="0dp"
             android:paddingHorizontal="@dimen/spacing_unit"
             android:text="@string/recognition_rules"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent" />
+            app:layout_constrainedWidth="true"
+            app:layout_constraintEnd_toStartOf="@id/switch_app_enabled"
+            app:layout_constraintTop_toTopOf="parent" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/switch_app_enabled"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:contentDescription="@string/app_rule_switch"
+            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
