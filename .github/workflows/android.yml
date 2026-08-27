@@ -3,45 +3,196 @@ name: Android CI
 on:
   push:
     branches: [ master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  ANDROID_PLATFORM: platforms;android-30
+  ANDROID_BUILD_TOOLS: build-tools;30.0.3
 
 jobs:
+  # 普通推送 / PR / 手动触发：执行 JVM 单元测试，构建 Debug APK 并上传 artifact。
   build:
-
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v3
-    - name: set up JDK 11
-      uses: actions/setup-java@v3
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
       with:
         java-version: '11'
-        distribution: 'temurin'
+        distribution: temurin
         cache: gradle
-        
-    - name: Generate info
+
+    - name: Install Android SDK 30
+      run: sdkmanager --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS"
+
+    - name: Generate Constants.kt
       run: |
-        cd ./app/src/main/java/top/xjunz/automator
-        touch Constants.kt
-        echo "package top.xjunz.automator" >> Constants.kt
-        echo "const val ALIPAY_DONATE_URL =\"xxx\"" >> Constants.kt
-        echo "const val EMAIL_ADDRESS = \"xxx\"" >> Constants.kt
-        echo "const val APP_DOWNLOAD_URL = \"https://github.com/xjunz/AutoSkip/releases\"" >> Constants.kt
-        cd ../../../../../../..
-        keytool -genkey -alias a -dname CN=_ -storepass passwd -keypass passwd -keyalg RSA -keystore android.keystore
-        echo keystore.alias=a >> sign.properties
-        echo keystore.keyPassword=passwd >> sign.properties
-        echo keystore.password=passwd >> sign.properties
-        echo keystore.file=$(pwd)/android.keystore >> sign.properties
+        cat > app/src/main/java/top/xjunz/automator/Constants.kt << 'EOF'
+        package top.xjunz.automator
+
+        const val ALIPAY_DONATE_URL = "xxx"
+        const val EMAIL_ADDRESS = "xxx"
+        const val APP_DOWNLOAD_URL = "${{ github.server_url }}/${{ github.repository }}/releases"
+        EOF
+
+    - name: Set up test signing
+      run: |
+        keytool -genkeypair -noprompt \
+          -alias a \
+          -dname CN=_ \
+          -storepass passwd \
+          -keypass passwd \
+          -keyalg RSA \
+          -validity 10000 \
+          -keystore android.keystore
+        cat > sign.properties << EOF
+        keystore.alias=a
+        keystore.keyPassword=passwd
+        keystore.password=passwd
+        keystore.file=$(pwd)/android.keystore
+        EOF
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew assembleDebug
 
-    - name: Upload apk
-      uses: actions/upload-artifact@v2
+    - name: Test and build debug APK
+      run: ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug
+
+    - name: Upload debug APK
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: AutoSkip_apk_${{ github.sha }}
+        name: AutoSkip-debug-${{ github.sha }}-${{ github.run_attempt }}
         path: app/build/outputs/apk/debug/*.apk
+        if-no-files-found: error
+        retention-days: 14
+
+  # 推送 vMAJOR.MINOR.PATCH 标签：构建正式签名 Release APK 并发布到 GitHub Releases。
+  release:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      with:
+        java-version: '11'
+        distribution: temurin
+        cache: gradle
+
+    - name: Install Android SDK 30
+      run: sdkmanager --install "$ANDROID_PLATFORM" "$ANDROID_BUILD_TOOLS"
+
+    - name: Generate Constants.kt
+      run: |
+        cat > app/src/main/java/top/xjunz/automator/Constants.kt << 'EOF'
+        package top.xjunz.automator
+
+        const val ALIPAY_DONATE_URL = "xxx"
+        const val EMAIL_ADDRESS = "xxx"
+        const val APP_DOWNLOAD_URL = "${{ github.server_url }}/${{ github.repository }}/releases"
+        EOF
+
+    - name: Resolve release version
+      id: release_version
+      env:
+        RELEASE_TAG: ${{ github.ref_name }}
+      run: |
+        version="${RELEASE_TAG#v}"
+        if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Release 标签必须符合 vMAJOR.MINOR.PATCH，例如 v1.2.3。"
+          exit 1
+        fi
+
+        IFS=. read -r major minor patch <<< "$version"
+        major_number=$((10#$major))
+        minor_number=$((10#$minor))
+        patch_number=$((10#$patch))
+        if (( major_number < 1 || major_number > 2099 || minor_number > 999 || patch_number > 999 )); then
+          echo "::error::版本号超出 Android versionCode 映射范围。"
+          exit 1
+        fi
+
+        version_code=$((major_number * 1000000 + minor_number * 1000 + patch_number))
+        echo "name=$version" >> "$GITHUB_OUTPUT"
+        echo "code=$version_code" >> "$GITHUB_OUTPUT"
+
+    - name: Set up release signing
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
+      run: |
+        missing=()
+        for name in KEYSTORE_BASE64 KEYSTORE_ALIAS KEYSTORE_PASSWORD KEYSTORE_KEY_PASSWORD; do
+          if [ -z "${!name}" ]; then
+            missing+=("$name")
+          fi
+        done
+        if (( ${#missing[@]} > 0 )); then
+          echo "::error::缺少 Release 签名 Secrets: ${missing[*]}"
+          exit 1
+        fi
+
+        printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
+        keytool -list \
+          -keystore release.keystore \
+          -storepass "$KEYSTORE_PASSWORD" \
+          -alias "$KEYSTORE_ALIAS" \
+          >/dev/null
+        cat > sign.properties << EOF
+        keystore.alias=$KEYSTORE_ALIAS
+        keystore.keyPassword=$KEYSTORE_KEY_PASSWORD
+        keystore.password=$KEYSTORE_PASSWORD
+        keystore.file=$(pwd)/release.keystore
+        EOF
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build release APK
+      run: |
+        ./gradlew --no-daemon --stacktrace \
+          -PciVersionName="${{ steps.release_version.outputs.name }}" \
+          -PciVersionCode="${{ steps.release_version.outputs.code }}" \
+          assembleRelease
+
+    - name: Upload release APK
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: AutoSkip-release-${{ github.ref_name }}-${{ github.run_attempt }}
+        path: app/build/outputs/apk/release/*.apk
+        if-no-files-found: error
+
+    - name: Publish to GitHub Releases
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: ${{ github.ref_name }}
+      run: |
+        if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          gh release upload "$RELEASE_TAG" \
+            app/build/outputs/apk/release/*.apk \
+            --clobber
+        else
+          gh release create "$RELEASE_TAG" \
+            app/build/outputs/apk/release/*.apk \
+            --verify-tag \
+            --generate-notes
+        fi

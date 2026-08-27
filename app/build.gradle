@@ -19,6 +19,27 @@ int incrementRefine() {
 }
 
 def refine = incrementRefine()
+def ciVersionName = project.findProperty("ciVersionName")?.toString()
+def ciVersionCodeProperty = project.findProperty("ciVersionCode")?.toString()
+if ((ciVersionName == null) != (ciVersionCodeProperty == null)) {
+    throw new GradleException("ciVersionName and ciVersionCode must be provided together.")
+}
+
+def resolvedVersionCode = 5
+if (ciVersionCodeProperty != null) {
+    if (ciVersionName.trim().isEmpty()) {
+        throw new GradleException("ciVersionName must not be empty.")
+    }
+    try {
+        resolvedVersionCode = ciVersionCodeProperty.toInteger()
+    } catch (NumberFormatException ignored) {
+        throw new GradleException("ciVersionCode must be an integer.")
+    }
+    if (resolvedVersionCode <= 0 || resolvedVersionCode > 2100000000) {
+        throw new GradleException("ciVersionCode is outside the Android versionCode range.")
+    }
+}
+
 android {
     signingConfigs {
         sign
@@ -29,11 +50,8 @@ android {
         applicationId "top.xjunz.automator"
         minSdkVersion 23
         targetSdkVersion 30
-        versionCode 5
-        versionName "1.1.1"+ ".r" + refine
-        if(gradle.startParameter.taskNames.any{it.toLowerCase().contains("debug")}){
-            versionName+="-debug"
-        }
+        versionCode resolvedVersionCode
+        versionName ciVersionName ?: "1.1.1"+ ".r" + refine
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "int", "REFINE", refine.toString()
     }
@@ -47,6 +65,7 @@ android {
         }
         debug {
             debuggable true
+            versionNameSuffix "-debug"
             signingConfig signingConfigs.sign
         }
     }

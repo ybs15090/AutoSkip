@@ -13,4 +13,7 @@
 .externalNativeBuild
 .cxx
 sign.properties
+android.keystore
+release.keystore
+release.keystore.info.txt
 .vscode/settings.json

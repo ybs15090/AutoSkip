@@ -3,7 +3,7 @@
 ## 项目概览
 
 - 本项目是基于 Shizuku 授权和 Android `UiAutomation` 的自动跳过启动广告工具。
-- 项目使用 Groovy Gradle、Kotlin 1.5.30、Android Gradle Plugin 7.0.2、Gradle 7.0.2 和 JDK 11。
+- 项目使用 Groovy Gradle、Kotlin 1.5.30、Android Gradle Plugin 7.2.0、Gradle 7.3.3 和 JDK 11。
 - Android 配置为 `compileSdk 30`、`targetSdk 30`、`minSdk 23`；除非任务明确要求，不要顺手升级 Gradle、Kotlin、SDK 或依赖版本。
 
 ## 仓库结构
@@ -12,7 +12,7 @@
 - `automator/`：运行在 Shizuku 特权进程中的自动化服务、AIDL 接口、结果模型与记录持久化。
 - `automator/hidden-apis/`：编译期使用的 Android 隐藏 API 声明；不要把它当作普通运行时实现。
 - `app/src/main/res/`：布局、字符串、主题、菜单及图片资源。
-- `.github/workflows/android.yml`：JDK 11 下执行 `assembleDebug` 的 CI 构建流程。
+- `.github/workflows/android.yml`：JDK 11 下的 CI 构建流程——推送/PR 执行 JVM 单元测试、构建 Debug APK 并上传 artifact；推送 `vMAJOR.MINOR.PATCH` 标签时，将标签版本注入 APK，使用 GitHub Secrets 中的正式签名构建 Release APK 并发布到 GitHub Releases。
 
 ## 修改原则
 
@@ -21,7 +21,7 @@
 - 面向用户的文字放入 `app/src/main/res/values/strings.xml`，不要在界面代码中新增可本地化的硬编码文案。
 - 修改 AIDL、Parcelable 模型或 Binder 方法时，同步检查 `.aidl` 声明、Kotlin 实现、客户端调用和混淆规则。
 - 修改 `UiAutomation`、隐藏 API、Shizuku 服务绑定、输入注入或开机自启逻辑时，明确考虑 Android 6（API 23）及不同系统版本的兼容分支。
-- 不提交密钥库、密码、真实联系信息或其他凭据；`sign.properties` 已被忽略。
+- 不提交密钥库、密码、真实联系信息或其他凭据；`sign.properties`、`android.keystore` 和 `release.keystore` 已被忽略。
 
 ## 本地构建准备
 
