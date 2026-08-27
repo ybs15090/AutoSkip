@@ -35,7 +35,6 @@ package top.xjunz.automator
 const val ALIPAY_DONATE_URL = "xxx"
 const val EMAIL_ADDRESS = "xxx"
 const val APP_DOWNLOAD_URL = "xxx"
-const val FEEDBACK_GROUP_URL = "xxx"
 ```
 
 未提供 `sign.properties` 时，`sign.gradle` 会回退到默认 debug 签名。需要自定义签名时，按 `README.md` 配置本地文件，禁止提交真实签名材料。
