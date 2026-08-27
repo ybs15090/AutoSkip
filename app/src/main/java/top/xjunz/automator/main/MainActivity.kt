@@ -22,7 +22,6 @@ import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuProvider.MANAGER_APPLICATION_ID
 import rikka.sui.Sui
 import top.xjunz.automator.BuildConfig
-import top.xjunz.automator.FEEDBACK_GROUP_URL
 import top.xjunz.automator.R
 import top.xjunz.automator.app.AutomatorViewModel
 import top.xjunz.automator.app.LOG_FILE_NAME
@@ -111,7 +110,6 @@ class MainActivity : AppCompatActivity() {
                             sendMailTo(this@MainActivity, null)
                         }
                     }
-                    R.id.item_feedback_group -> viewUrl(this@MainActivity, FEEDBACK_GROUP_URL)
                     R.id.item_feedback_issues -> viewUrl(
                         this@MainActivity,
                         "https://github.com/xjunz/AutoSkip/issues"

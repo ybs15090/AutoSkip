@@ -28,7 +28,6 @@ jobs:
         echo "const val ALIPAY_DONATE_URL =\"xxx\"" >> Constants.kt
         echo "const val EMAIL_ADDRESS = \"xxx\"" >> Constants.kt
         echo "const val APP_DOWNLOAD_URL = \"https://github.com/xjunz/AutoSkip/releases\"" >> Constants.kt
-        echo "const val FEEDBACK_GROUP_URL = \"xxx\"" >> Constants.kt
         cd ../../../../../../..
         keytool -genkey -alias a -dname CN=_ -storepass passwd -keypass passwd -keyalg RSA -keystore android.keystore
         echo keystore.alias=a >> sign.properties
