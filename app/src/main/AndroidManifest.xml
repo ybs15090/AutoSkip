@@ -44,6 +44,11 @@
             android:theme="@style/Base.Automator.Scrim" />
 
         <activity
+            android:name=".rules.BlacklistActivity"
+            android:exported="false"
+            android:theme="@style/Base.Automator.Scrim" />
+
+        <activity
             android:name=".rules.RecognitionRulesActivity"
             android:exported="false"
             android:theme="@style/Base.Automator.Scrim" />

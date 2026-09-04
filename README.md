@@ -18,7 +18,7 @@ AutoSkip 是一款基于 [Shizuku](https://github.com/RikkaApps/Shizuku) 和 And
 ## 主要功能
 
 - 通过 Shizuku 启动特权进程，使用 Android `UiAutomation` 监听界面并执行动作。
-- 支持应用范围总开关、普通模式、严格模式、黑名单和白名单。
+- 支持应用范围总开关、普通模式、严格模式、黑名单和白名单，并提供一键回顶和统一的黑名单管理页。
 - 支持文字、内容描述、View ID、控件类型，以及精确、包含和正则匹配。
 - 支持全局规则和应用专属规则，可配置区域、延迟与点击方式。
 - 多个节点同时命中时，根据匹配质量、位置、大小和可点击性选择候选。
@@ -45,7 +45,7 @@ AutoSkip 是一款基于 [Shizuku](https://github.com/RikkaApps/Shizuku) 和 And
 
 | 文档 | 内容 |
 | --- | --- |
-| [使用指南](doc/使用指南.md) | 安装、首次启动、应用范围、规则配置、学习模式和记录管理 |
+| [使用指南](doc/使用指南.md) | 安装、首次启动、应用范围、黑名单管理、规则配置、学习模式和记录管理 |
 | [识别规则](doc/识别规则.md) | 规则字段、默认规则、候选搜索、评分、示例和误触控制 |
 | [点击与失败重试逻辑](doc/点击与失败重试逻辑.md) | 事件入口、主动发现、零延迟点击、父节点/坐标回退、确认与有限重试 |
 | [隐私与权限](doc/隐私与权限.md) | Android 权限、Shizuku 能力、本地数据和日志分享注意事项 |
@@ -92,4 +92,3 @@ Windows 可使用：
 本项目采用 [Apache License 2.0](LICENSE) 开源，请在许可证允许的范围内使用、修改和分发代码。
 
 AutoSkip 原项目由 [XJUNZ](https://github.com/xjunz) 开发，原始仓库为 [xjunz/AutoSkip](https://github.com/xjunz/AutoSkip)。当前仓库在原项目基础上继续维护和扩展，保留原作者版权信息：Copyright © XJUNZ 2021。
-

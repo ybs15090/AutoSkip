@@ -1,9 +1,12 @@
 package top.xjunz.automator.rules
 
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -50,6 +53,33 @@ class AppRulesActivity : AppCompatActivity() {
         initRuleControls()
         initSearch()
         loadApplications()
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.app_rules, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.item_scroll_to_top -> {
+                scrollToTop()
+                true
+            }
+            R.id.item_blacklist -> {
+                startActivity(Intent(this, BlacklistActivity::class.java))
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun scrollToTop() {
+        binding.rvApps.stopScroll()
+        if (appAdapter.itemCount > 0) {
+            binding.rvApps.scrollToPosition(0)
+        }
+        binding.appBar.setExpanded(true, true)
     }
 
     override fun onResume() {

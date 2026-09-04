@@ -81,6 +81,12 @@
     <string name="strict_mode_hint">严格模式：只有开关已开启的应用才会自动跳过。</string>
     <string name="application_rules_disabled_hint">应用范围控制已关闭，下面的设置会保留但暂不生效。</string>
     <string name="app_rule_switch">允许在此应用中自动跳过</string>
+    <string name="scroll_to_top">回到顶部</string>
+    <string name="blacklist">黑名单</string>
+    <string name="empty_blacklist">黑名单中暂无应用</string>
+    <string name="remove_from_blacklist">移除</string>
+    <string name="format_removed_from_blacklist">已将“%s”移出黑名单</string>
+    <string name="uninstalled_app">已卸载应用</string>
     <string name="recent_action">最近动作</string>
     <string name="format_recent_action_detail">%1$s · 点击“%2$s”</string>
     <string name="false_positive_blacklist">误触，加入黑名单</string>

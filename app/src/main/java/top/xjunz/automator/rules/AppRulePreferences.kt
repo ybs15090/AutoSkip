@@ -99,6 +99,14 @@ object AppRulePreferences {
         setPackageEnabled(packageName, false)
     }
 
+    fun removeFromBlacklist(packageName: String) {
+        val blacklist = snapshot().blacklist.toMutableSet()
+        if (!blacklist.remove(packageName)) return
+        preferences.edit()
+            .putStringSet(KEY_BLACKLIST, blacklist)
+            .apply()
+    }
+
     fun restorePackageRule(packageName: String, state: PackageRuleState) {
         val whitelist = snapshot().whitelist.toMutableSet()
         val blacklist = snapshot().blacklist.toMutableSet()
