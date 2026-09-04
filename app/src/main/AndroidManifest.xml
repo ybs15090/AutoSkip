@@ -57,6 +57,11 @@
             android:name=".stats.StatsActivity"
             android:theme="@style/Base.Automator.Scrim" />
 
+        <activity
+            android:name=".backup.DataBackupActivity"
+            android:exported="false"
+            android:theme="@style/Base.Automator.Scrim" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="top.xjunz.automator.provider.file"

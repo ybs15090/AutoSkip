@@ -37,6 +37,26 @@ object AppRulePreferences {
         singleClickLimitEnabled = preferences.getBoolean(KEY_SINGLE_CLICK_LIMIT, false)
     )
 
+    /**
+     * Replaces the complete application-scope configuration in one synchronous write.
+     * Blacklist entries take precedence if a malformed backup contains the same package
+     * in both lists.
+     */
+    fun replace(snapshot: AppRuleSnapshot): Boolean {
+        val blacklist = snapshot.blacklist.filter { it.isNotBlank() }.toSet()
+        val whitelist = snapshot.whitelist
+            .filter { it.isNotBlank() }
+            .filterNot(blacklist::contains)
+            .toSet()
+        return preferences.edit()
+            .putBoolean(KEY_ENABLED, snapshot.enabled)
+            .putBoolean(KEY_STRICT_MODE, snapshot.strictMode)
+            .putStringSet(KEY_WHITELIST, whitelist)
+            .putStringSet(KEY_BLACKLIST, blacklist)
+            .putBoolean(KEY_SINGLE_CLICK_LIMIT, snapshot.singleClickLimitEnabled)
+            .commit()
+    }
+
     fun setEnabled(enabled: Boolean) {
         preferences.edit().putBoolean(KEY_ENABLED, enabled).apply()
     }

@@ -11,6 +11,9 @@
         android:id="@+id/item_dump_log"
         android:title="@string/dump_log" />
     <item
+        android:id="@+id/item_data_backup_restore"
+        android:title="@string/data_backup_restore" />
+    <item
         android:id="@+id/item_feedback"
         android:title="@string/feedback">
         <menu>

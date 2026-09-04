@@ -483,6 +483,45 @@ class AutomatorViewModel constructor(val app: Application) : AndroidViewModel(ap
         }
     }
 
+    /** Returns the newest available statistics without changing service state. */
+    suspend fun getRecordSnapshot(): List<Record> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (isServiceAlive()) automatorService?.records?.toList() else null
+        }.getOrNull() ?: readLocalRecords()
+    }
+
+    /**
+     * Replaces statistics stored in the application process. The caller must stop the
+     * automator service first; this method deliberately never stops or restarts it.
+     */
+    suspend fun replaceLocalRecords(records: List<Record>): Boolean {
+        if (isBinding.value == true || isRunning.value == true || isServiceAlive()) return false
+        val result = withContext(Dispatchers.IO) {
+            if (isBinding.value == true || isRunning.value == true || isServiceAlive()) {
+                return@withContext false
+            }
+            val recordFile = app.getFileStreamPath(RECORD_FILE_NAME)
+            val countFile = app.getFileStreamPath(COUNT_FILE_NAME)
+            val previousRecords = recordFile.takeIf { it.exists() }?.readBytes()
+            val previousCount = countFile.takeIf { it.exists() }?.readBytes()
+            runCatching {
+                persistLocalRecordState(records)
+                true
+            }.onFailure {
+                runCatching {
+                    if (previousRecords == null) recordFile.delete() else recordFile.writeBytes(previousRecords)
+                    if (previousCount == null) countFile.delete() else countFile.writeBytes(previousCount)
+                }
+                error.postValue(it)
+            }.getOrDefault(false)
+        }
+        if (result) {
+            skippingTimes.value = records.sumOf { it.count }
+            latestAction.value = records.maxByOrNull { it.latestTimestamp }
+        }
+        return result
+    }
+
 
     fun updateGranted() {
         if (Shizuku.pingBinder()) {

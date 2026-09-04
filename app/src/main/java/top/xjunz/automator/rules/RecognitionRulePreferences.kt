@@ -51,6 +51,25 @@ object RecognitionRulePreferences {
         return RecognitionRuleCodec.decode(configurationJson())
     }
 
+    /** Replaces global and application-specific recognition rules as one configuration. */
+    fun replace(configuration: RecognitionConfiguration): Boolean {
+        val normalizedApplicationRules = configuration.applicationRules
+            .filterKeys { it.isNotBlank() }
+            .mapValues { (_, rules) -> rules.map(RecognitionRule::normalized) }
+            .filterValues { it.isNotEmpty() }
+        val normalized = configuration.copy(
+            globalRules = configuration.globalRules.map(RecognitionRule::normalized),
+            applicationRules = normalizedApplicationRules,
+            disabledApplicationRulePackages = configuration.disabledApplicationRulePackages
+                .filter(normalizedApplicationRules::containsKey)
+                .toSet()
+        )
+        return preferences.edit()
+            .putString(KEY_CONFIGURATION, RecognitionRuleCodec.encode(normalized))
+            .putInt(KEY_DEFAULTS_REVISION, CURRENT_DEFAULTS_REVISION)
+            .commit()
+    }
+
     fun rulesForEditor(packageName: String?): List<RecognitionRule> {
         val configuration = snapshot()
         return if (packageName == null) {

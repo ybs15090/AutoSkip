@@ -25,6 +25,7 @@ import top.xjunz.automator.BuildConfig
 import top.xjunz.automator.R
 import top.xjunz.automator.app.AutomatorViewModel
 import top.xjunz.automator.app.LOG_FILE_NAME
+import top.xjunz.automator.backup.DataBackupActivity
 import top.xjunz.automator.autostart.enableShizukuAutoStart
 import top.xjunz.automator.autostart.isAutoStartEnabled
 import top.xjunz.automator.autostart.isShizukuAutoStartEnabled
@@ -93,6 +94,9 @@ class MainActivity : AppCompatActivity() {
                 when (it.itemId) {
                     R.id.item_test -> testAvailability()
                     R.id.item_dump_log -> shareLog()
+                    R.id.item_data_backup_restore -> startActivity(
+                        Intent(this@MainActivity, DataBackupActivity::class.java)
+                    )
                     R.id.item_auto_start -> {
                         setAutoStartEnabled(!it.isChecked)
                         it.isChecked = isAutoStartEnabled()
