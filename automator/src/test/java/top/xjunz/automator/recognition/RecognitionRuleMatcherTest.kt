@@ -92,6 +92,51 @@ class RecognitionRuleMatcherTest {
     }
 
     @Test
+    fun platformTextSearchUsesDistinctLiteralTextQueries() {
+        val rules = listOf(
+            rule(pattern = "跳过", mode = RuleMatchMode.CONTAINS),
+            rule(pattern = " 跳过 ", mode = RuleMatchMode.EXACT).copy(
+                feature = RuleFeature.CONTENT_DESCRIPTION
+            ),
+            rule(pattern = "skip", mode = RuleMatchMode.CONTAINS),
+            rule(pattern = "\\d+秒后跳过", mode = RuleMatchMode.REGEX),
+            rule(pattern = "skip_button", mode = RuleMatchMode.EXACT).copy(
+                feature = RuleFeature.VIEW_ID
+            )
+        )
+
+        assertEquals(
+            listOf("跳过", "skip"),
+            RecognitionSearchStrategy.platformTextQueries(rules)
+        )
+        assertEquals(
+            "跳过",
+            RecognitionSearchStrategy.platformTextQueryForCheck(rules, completedChecks = 0)
+        )
+        assertEquals(
+            "skip",
+            RecognitionSearchStrategy.platformTextQueryForCheck(rules, completedChecks = 1)
+        )
+        assertEquals(
+            "跳过",
+            RecognitionSearchStrategy.platformTextQueryForCheck(rules, completedChecks = 2)
+        )
+        assertNull(
+            RecognitionSearchStrategy.platformTextQueryForCheck(
+                listOf(rule(pattern = "\\d+秒后跳过", mode = RuleMatchMode.REGEX)),
+                completedChecks = 0
+            )
+        )
+        assertFalse(RecognitionSearchStrategy.isPlatformTextSearchComplete(rules))
+        assertFalse(RecognitionSearchStrategy.isPlatformTextSearchComplete(rules.take(3)))
+        assertTrue(
+            RecognitionSearchStrategy.isPlatformTextSearchComplete(
+                listOf(rules[0], rules[2])
+            )
+        )
+    }
+
+    @Test
     fun applicationOverridesCanBePausedWithoutDeletingTheirRules() {
         val global = rule(pattern = "跳过", mode = RuleMatchMode.CONTAINS)
         val application = rule(pattern = "关闭广告", mode = RuleMatchMode.EXACT)

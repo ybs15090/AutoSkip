@@ -71,6 +71,14 @@ internal object RecognitionAttemptPolicy {
         return maxOf(configuredDelayMillis.coerceAtLeast(0L), automaticDelay)
     }
 
+    /**
+     * Zero-delay initial attempts must run in the current accessibility callback. Posting them to
+     * the UiAutomation handler can leave them waiting behind a burst of events from a WebView.
+     */
+    fun shouldExecuteImmediately(initialDelayMillis: Long): Boolean {
+        return initialDelayMillis <= 0L
+    }
+
     fun decide(
         candidateState: CandidateState,
         completedAttempts: Int,
@@ -89,5 +97,28 @@ internal object RecognitionAttemptPolicy {
             CandidateState.UNKNOWN -> VerificationDecision.WAIT
             CandidateState.GONE -> VerificationDecision.CONFIRMED
         }
+    }
+}
+
+/**
+ * A newly opened WebView may draw its skip control before publishing the corresponding
+ * accessibility node or sending another window-content event. Poll only during a short foreground
+ * transition window so that node publication does not add a visible multi-second delay.
+ */
+internal object RecognitionDiscoveryPolicy {
+
+    const val POLL_INTERVAL_MILLIS = 150L
+    const val MAX_DURATION_MILLIS = 8_000L
+
+    fun shouldStart(
+        isNewForegroundSession: Boolean,
+        hasLiteralTextQuery: Boolean,
+        hasActiveAttempt: Boolean
+    ): Boolean {
+        return isNewForegroundSession && hasLiteralTextQuery && !hasActiveAttempt
+    }
+
+    fun shouldContinue(elapsedMillis: Long): Boolean {
+        return elapsedMillis.coerceAtLeast(0L) < MAX_DURATION_MILLIS
     }
 }

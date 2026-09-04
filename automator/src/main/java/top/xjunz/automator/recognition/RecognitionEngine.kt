@@ -37,6 +37,45 @@ class RecognitionEngine(private val uiAutomation: UiAutomation) {
         packageName: String,
         rules: List<RecognitionRule>,
         requiredRuleId: String? = null
+    ): Match? = findBestMatchInternal(
+        root,
+        packageName,
+        rules,
+        requiredRuleId,
+        platformTextOnly = false,
+        platformTextQuery = null
+    )
+
+    /**
+     * Performs one platform-indexed text query for foreground discovery. The caller rotates the
+     * configured literal queries between checks, avoiding repeated full-tree walks while a cold
+     * WebView is still publishing its virtual accessibility nodes.
+     */
+    fun findBestPlatformTextMatch(
+        root: AccessibilityNodeInfo,
+        packageName: String,
+        rules: List<RecognitionRule>,
+        completedChecks: Int
+    ): Match? {
+        val query = RecognitionSearchStrategy.platformTextQueryForCheck(rules, completedChecks)
+            ?: return null
+        return findBestMatchInternal(
+            root,
+            packageName,
+            rules,
+            requiredRuleId = null,
+            platformTextOnly = true,
+            platformTextQuery = query
+        )
+    }
+
+    private fun findBestMatchInternal(
+        root: AccessibilityNodeInfo,
+        packageName: String,
+        rules: List<RecognitionRule>,
+        requiredRuleId: String?,
+        platformTextOnly: Boolean,
+        platformTextQuery: String?
     ): Match? {
         if (rules.isEmpty()) return null
         val preparedRules = rules.asSequence()
@@ -48,9 +87,7 @@ class RecognitionEngine(private val uiAutomation: UiAutomation) {
         var best: Match? = null
         var visited = 0
 
-        fun visit(node: AccessibilityNodeInfo, depth: Int) {
-            if (visited >= MAX_VISITED_NODES || depth > MAX_TREE_DEPTH) return
-            visited++
+        fun consider(node: AccessibilityNodeInfo) {
             if (node.isVisibleToUser && !node.isEditable) {
                 val matchingRules = preparedRules.mapNotNull { prepared ->
                     val value = valueFor(node, prepared.rule.feature)
@@ -112,6 +149,43 @@ class RecognitionEngine(private val uiAutomation: UiAutomation) {
                     }
                 }
             }
+        }
+
+        val preparedRecognitionRules = preparedRules.map { it.rule }
+        val platformTextQueries = if (platformTextQuery == null) {
+            RecognitionSearchStrategy.platformTextQueries(preparedRecognitionRules)
+        } else {
+            listOf(platformTextQuery)
+        }
+        if (platformTextQueries.isNotEmpty()) {
+            // Besides being faster than walking a deep virtual tree, the platform query makes some
+            // WebViews publish their accessibility nodes while the early window events are handled.
+            platformTextQueries.forEach { query ->
+                val candidates = runCatching {
+                    root.findAccessibilityNodeInfosByText(query)
+                }.getOrNull() ?: return@forEach
+                candidates.forEach { candidate ->
+                    try {
+                        consider(candidate)
+                    } finally {
+                        candidate.recycle()
+                    }
+                }
+            }
+            if (platformTextOnly) return best
+            if (best != null && RecognitionSearchStrategy.isPlatformTextSearchComplete(
+                    preparedRecognitionRules
+                )
+            ) {
+                return best
+            }
+        }
+        if (platformTextOnly) return null
+
+        fun visit(node: AccessibilityNodeInfo, depth: Int) {
+            if (visited >= MAX_VISITED_NODES || depth > MAX_TREE_DEPTH) return
+            visited++
+            consider(node)
             for (index in 0 until node.childCount) {
                 if (visited >= MAX_VISITED_NODES) break
                 val child = runCatching { node.getChild(index) }.getOrNull() ?: continue

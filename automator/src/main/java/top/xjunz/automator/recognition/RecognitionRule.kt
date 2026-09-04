@@ -182,3 +182,36 @@ object RecognitionCandidateScorer {
         return score
     }
 }
+
+internal object RecognitionSearchStrategy {
+
+    fun platformTextQueries(rules: List<RecognitionRule>): List<String> {
+        return rules.asSequence()
+            .filter { it.enabled && it.pattern.isNotBlank() }
+            .filter {
+                it.feature == RuleFeature.TEXT ||
+                    it.feature == RuleFeature.CONTENT_DESCRIPTION
+            }
+            .filter { it.matchMode != RuleMatchMode.REGEX }
+            .map { it.pattern.trim() }
+            .distinct()
+            .toList()
+    }
+
+    fun platformTextQueryForCheck(
+        rules: List<RecognitionRule>,
+        completedChecks: Int
+    ): String? {
+        val queries = platformTextQueries(rules)
+        if (queries.isEmpty()) return null
+        return queries[completedChecks.coerceAtLeast(0) % queries.size]
+    }
+
+    fun isPlatformTextSearchComplete(rules: List<RecognitionRule>): Boolean {
+        return rules.isNotEmpty() && rules.all {
+            it.enabled && it.pattern.isNotBlank() &&
+                it.feature == RuleFeature.TEXT &&
+                it.matchMode != RuleMatchMode.REGEX
+        }
+    }
+}

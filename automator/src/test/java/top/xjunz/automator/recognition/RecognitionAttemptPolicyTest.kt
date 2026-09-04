@@ -36,6 +36,54 @@ class RecognitionAttemptPolicyTest {
     }
 
     @Test
+    fun onlyZeroDelayInitialAttemptsExecuteImmediately() {
+        assertTrue(RecognitionAttemptPolicy.shouldExecuteImmediately(0L))
+        assertFalse(RecognitionAttemptPolicy.shouldExecuteImmediately(1L))
+        assertFalse(
+            RecognitionAttemptPolicy.shouldExecuteImmediately(
+                RecognitionAttemptPolicy.NON_CLICKABLE_INITIAL_DELAY_MILLIS
+            )
+        )
+    }
+
+    @Test
+    fun candidateDiscoveryPollingIsResponsiveButTimeBounded() {
+        assertEquals(150L, RecognitionDiscoveryPolicy.POLL_INTERVAL_MILLIS)
+        assertEquals(8_000L, RecognitionDiscoveryPolicy.MAX_DURATION_MILLIS)
+        assertTrue(
+            RecognitionDiscoveryPolicy.shouldStart(
+                isNewForegroundSession = true,
+                hasLiteralTextQuery = true,
+                hasActiveAttempt = false
+            )
+        )
+        assertFalse(
+            RecognitionDiscoveryPolicy.shouldStart(
+                isNewForegroundSession = false,
+                hasLiteralTextQuery = true,
+                hasActiveAttempt = false
+            )
+        )
+        assertFalse(
+            RecognitionDiscoveryPolicy.shouldStart(
+                isNewForegroundSession = true,
+                hasLiteralTextQuery = false,
+                hasActiveAttempt = false
+            )
+        )
+        assertFalse(
+            RecognitionDiscoveryPolicy.shouldStart(
+                isNewForegroundSession = true,
+                hasLiteralTextQuery = true,
+                hasActiveAttempt = true
+            )
+        )
+        assertTrue(RecognitionDiscoveryPolicy.shouldContinue(0L))
+        assertTrue(RecognitionDiscoveryPolicy.shouldContinue(7_999L))
+        assertFalse(RecognitionDiscoveryPolicy.shouldContinue(8_000L))
+    }
+
+    @Test
     fun fingerprintToleratesSmallLayoutMovementButRejectsAnotherCandidate() {
         val fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
             ruleId = "skip",

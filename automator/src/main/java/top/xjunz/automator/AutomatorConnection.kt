@@ -18,8 +18,10 @@ import top.xjunz.automator.model.Result
 import top.xjunz.automator.recognition.LearningCandidate
 import top.xjunz.automator.recognition.RecognitionAttemptPolicy
 import top.xjunz.automator.recognition.RecognitionConfiguration
+import top.xjunz.automator.recognition.RecognitionDiscoveryPolicy
 import top.xjunz.automator.recognition.RecognitionEngine
 import top.xjunz.automator.recognition.RecognitionRuleCodec
+import top.xjunz.automator.recognition.RecognitionSearchStrategy
 import top.xjunz.automator.rules.ApplicationRuleMatcher
 import top.xjunz.automator.util.Records
 import top.xjunz.automator.util.formatCurrentTime
@@ -94,6 +96,14 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         var lastResult: Result? = null
     )
 
+    private data class PendingRecognitionDiscovery(
+        val token: Long,
+        val generation: Long,
+        val packageName: String,
+        val startedUptimeMillis: Long,
+        var completedChecks: Int = 0
+    )
+
     init {
         try {
             log("========Start Connecting========")
@@ -158,7 +168,9 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         var distinct = false
         var oldPkgName: String? = null
         var nextAttemptToken = 0L
+        var nextDiscoveryToken = 0L
         val activeAttempts = mutableMapOf<String, PendingRecognitionAttempt>()
+        var activeDiscovery: PendingRecognitionDiscovery? = null
         uiAutomation.serviceInfo = uiAutomation.serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOWS_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
@@ -379,12 +391,170 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             }
         }
 
+        fun beginAttempt(packageName: String, match: RecognitionEngine.Match) {
+            if (activeAttempts.containsKey(packageName)) return
+            val attempt = PendingRecognitionAttempt(
+                token = ++nextAttemptToken,
+                generation = generation,
+                packageName = packageName,
+                ruleId = match.rule.id,
+                fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
+                    match.rule.id,
+                    match.windowId,
+                    match.bounds.left,
+                    match.bounds.top,
+                    match.bounds.right,
+                    match.bounds.bottom
+                )
+            )
+            activeAttempts[packageName] = attempt
+            val delayMillis = RecognitionAttemptPolicy.initialDelayMillis(
+                match.rule.delayMillis,
+                match.clickable,
+                match.parentClickable
+            )
+            if (RecognitionAttemptPolicy.shouldExecuteImmediately(delayMillis)) {
+                // UiAutomation dispatches events on the same looper as [handler]. Calling directly
+                // prevents a zero-delay attempt from waiting behind a WebView event burst.
+                executeAttempt(attempt)
+            } else {
+                scheduleExecution(attempt, delayMillis)
+            }
+        }
+
+        fun isDiscoveryActive(discovery: PendingRecognitionDiscovery): Boolean {
+            return monitoring && discovery.generation == monitoringGeneration &&
+                discovery.generation == generation &&
+                activeDiscovery?.token == discovery.token
+        }
+
+        fun finishDiscovery(discovery: PendingRecognitionDiscovery) {
+            if (activeDiscovery?.token == discovery.token) activeDiscovery = null
+        }
+
+        fun elapsedSinceDiscoveryStarted(discovery: PendingRecognitionDiscovery): Long {
+            return (SystemClock.uptimeMillis() - discovery.startedUptimeMillis).coerceAtLeast(0L)
+        }
+
+        fun cancelDiscovery() {
+            activeDiscovery = null
+        }
+
+        fun isDiscoveryAllowed(discovery: PendingRecognitionDiscovery): Boolean {
+            return oldPkgName == discovery.packageName &&
+                !isLearningPackage(discovery.packageName) &&
+                isPackageEnabled(discovery.packageName) &&
+                !(singleClickLimitEnabled && !distinct) &&
+                !activeAttempts.containsKey(discovery.packageName)
+        }
+
+        lateinit var executeDiscovery: (PendingRecognitionDiscovery) -> Unit
+
+        fun scheduleDiscoveryCheck(discovery: PendingRecognitionDiscovery) {
+            handler.postDelayed(
+                { executeDiscovery(discovery) },
+                RecognitionDiscoveryPolicy.POLL_INTERVAL_MILLIS
+            )
+        }
+
+        fun startDiscovery(packageName: String, rulesHaveTextQuery: Boolean) {
+            if (!RecognitionDiscoveryPolicy.shouldStart(
+                    isNewForegroundSession = distinct,
+                    hasLiteralTextQuery = rulesHaveTextQuery,
+                    hasActiveAttempt = activeAttempts.containsKey(packageName)
+                )
+            ) {
+                return
+            }
+            val current = activeDiscovery
+            if (current != null && current.packageName == packageName &&
+                isDiscoveryActive(current)
+            ) {
+                return
+            }
+            val discovery = PendingRecognitionDiscovery(
+                token = ++nextDiscoveryToken,
+                generation = generation,
+                packageName = packageName,
+                startedUptimeMillis = SystemClock.uptimeMillis()
+            )
+            activeDiscovery = discovery
+            scheduleDiscoveryCheck(discovery)
+        }
+
+        executeDiscovery = discover@{ discovery ->
+            if (!isDiscoveryActive(discovery)) return@discover
+            val discoveryAllowed = isDiscoveryAllowed(discovery)
+            val withinDiscoveryWindow = RecognitionDiscoveryPolicy.shouldContinue(
+                elapsedSinceDiscoveryStarted(discovery)
+            )
+            if (!discoveryAllowed || !withinDiscoveryWindow) {
+                finishDiscovery(discovery)
+                return@discover
+            }
+            var root: AccessibilityNodeInfo? = null
+            var match: RecognitionEngine.Match? = null
+            try {
+                val activeRoot = runCatching { uiAutomation.rootInActiveWindow }.getOrNull()
+                root = activeRoot
+                if (activeRoot == null) {
+                    scheduleDiscoveryCheck(discovery)
+                    return@discover
+                }
+                if (activeRoot.packageName?.toString() != discovery.packageName) {
+                    finishDiscovery(discovery)
+                    return@discover
+                }
+                val rules = recognitionConfiguration.rulesFor(discovery.packageName)
+                val checkIndex = discovery.completedChecks++
+                match = recognitionEngine.findBestPlatformTextMatch(
+                    activeRoot,
+                    discovery.packageName,
+                    rules,
+                    checkIndex
+                )
+                val discoveredMatch = match
+                if (discoveredMatch == null) {
+                    if (RecognitionSearchStrategy.platformTextQueryForCheck(
+                            rules,
+                            discovery.completedChecks
+                        ) == null ||
+                        !RecognitionDiscoveryPolicy.shouldContinue(
+                            elapsedSinceDiscoveryStarted(discovery)
+                        )
+                    ) {
+                        finishDiscovery(discovery)
+                    } else {
+                        scheduleDiscoveryCheck(discovery)
+                    }
+                    return@discover
+                }
+                val discoveryElapsed = elapsedSinceDiscoveryStarted(discovery)
+                finishDiscovery(discovery)
+                beginAttempt(discovery.packageName, discoveredMatch)
+                log(
+                    "Skip candidate discovered by polling: pkg=${discovery.packageName}, " +
+                        "rule=${discoveredMatch.rule.id}, checks=${discovery.completedChecks}, " +
+                        "elapsed=${discoveryElapsed}ms"
+                )
+            } catch (t: Throwable) {
+                finishDiscovery(discovery)
+                dumpError(t)
+            } finally {
+                match?.recycle()
+                root?.recycle()
+            }
+        }
+
         monitoring = true
         uiAutomation.setOnAccessibilityEventListener listener@{ event ->
             var eventSource: AccessibilityNodeInfo? = null
             var scanRoot: AccessibilityNodeInfo? = null
             try {
                 val packageName = event.packageName?.toString() ?: return@listener
+                // Verification and retries already re-scan the active window. Avoid doing the same
+                // work for every event in a WebView burst, or those events can starve the attempt.
+                if (activeAttempts.containsKey(packageName)) return@listener
                 eventSource = event.source
                 val source = uiAutomation.rootInActiveWindow ?: eventSource ?: return@listener
                 scanRoot = source
@@ -393,6 +563,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                     oldPkgName?.let { previousPackageName ->
                         activeAttempts[previousPackageName]?.let(::confirmAttempt)
                     }
+                    cancelDiscovery()
                     distinct = true
                     oldPkgName = packageName
                 }
@@ -412,32 +583,21 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 if (!isPackageEnabled(packageName)) return@listener
                 //when enabled, allow only one injected click during the same foreground session
                 if (singleClickLimitEnabled && !distinct) return@listener
-                if (activeAttempts.containsKey(packageName)) return@listener
                 val rules = recognitionConfiguration.rulesFor(packageName)
                 val match = recognitionEngine.findBestMatch(source, packageName, rules)
-                    ?: return@listener
+                if (match == null) {
+                    startDiscovery(
+                        packageName,
+                        RecognitionSearchStrategy.platformTextQueryForCheck(
+                            rules,
+                            completedChecks = 0
+                        ) != null
+                    )
+                    return@listener
+                }
                 try {
-                    val attempt = PendingRecognitionAttempt(
-                        token = ++nextAttemptToken,
-                        generation = generation,
-                        packageName = packageName,
-                        ruleId = match.rule.id,
-                        fingerprint = RecognitionAttemptPolicy.CandidateFingerprint(
-                            match.rule.id,
-                            match.windowId,
-                            match.bounds.left,
-                            match.bounds.top,
-                            match.bounds.right,
-                            match.bounds.bottom
-                        )
-                    )
-                    activeAttempts[packageName] = attempt
-                    val delayMillis = RecognitionAttemptPolicy.initialDelayMillis(
-                        match.rule.delayMillis,
-                        match.clickable,
-                        match.parentClickable
-                    )
-                    scheduleExecution(attempt, delayMillis)
+                    cancelDiscovery()
+                    beginAttempt(packageName, match)
                 } finally {
                     match.recycle()
                 }
