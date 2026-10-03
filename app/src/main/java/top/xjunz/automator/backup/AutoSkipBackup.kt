@@ -150,6 +150,7 @@ object AutoSkipBackupCodec {
                 "disabledApplicationRulePackages",
                 stringArray(configuration.disabledApplicationRulePackages.sorted())
             )
+            .put("startupOnlyPackages", stringArray(configuration.startupOnlyPackages.sorted()))
     }
 
     private fun encodeRules(rules: List<RecognitionRule>): JSONArray {
@@ -187,7 +188,17 @@ object AutoSkipBackupCodec {
         val disabledPackages = root.requiredStringSet("disabledApplicationRulePackages")
             .filter(applicationRules::containsKey)
             .toSet()
-        return RecognitionConfiguration(globalRules, applicationRules, disabledPackages)
+        val startupOnlyPackages = if (root.has("startupOnlyPackages")) {
+            root.requiredStringSet("startupOnlyPackages")
+        } else {
+            emptySet()
+        }
+        return RecognitionConfiguration(
+            globalRules,
+            applicationRules,
+            disabledPackages,
+            startupOnlyPackages
+        )
     }
 
     private fun decodeRules(array: JSONArray): List<RecognitionRule> {

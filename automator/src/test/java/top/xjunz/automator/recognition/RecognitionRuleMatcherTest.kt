@@ -9,6 +9,16 @@ import org.junit.Test
 class RecognitionRuleMatcherTest {
 
     @Test
+    fun startupOnlyDefaultsOffAndWorksWithInheritedGlobalRules() {
+        val rule = rule(pattern = "跳过", mode = RuleMatchMode.CONTAINS)
+        val configuration = RecognitionConfiguration(globalRules = listOf(rule))
+        assertTrue(configuration.startupOnlyPackages.isEmpty())
+        val startupOnly = configuration.copy(startupOnlyPackages = setOf("example.app"))
+        assertEquals(listOf(rule), startupOnly.rulesFor("example.app"))
+        assertFalse(startupOnly.hasApplicationRules("example.app"))
+    }
+
+    @Test
     fun newRulesDefaultToFullScreen() {
         assertEquals(
             RuleRegion.ANY,

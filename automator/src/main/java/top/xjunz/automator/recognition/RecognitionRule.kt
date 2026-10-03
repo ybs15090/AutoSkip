@@ -55,7 +55,8 @@ data class RecognitionRule(
 data class RecognitionConfiguration(
     val globalRules: List<RecognitionRule> = emptyList(),
     val applicationRules: Map<String, List<RecognitionRule>> = emptyMap(),
-    val disabledApplicationRulePackages: Set<String> = emptySet()
+    val disabledApplicationRulePackages: Set<String> = emptySet(),
+    val startupOnlyPackages: Set<String> = emptySet()
 ) {
     fun hasApplicationRules(packageName: String): Boolean {
         return applicationRules[packageName]?.isNotEmpty() == true

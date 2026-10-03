@@ -4,7 +4,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 object RecognitionRuleCodec {
-    private const val VERSION = 2
+    private const val VERSION = 3
 
     fun encode(configuration: RecognitionConfiguration): String {
         val root = JSONObject()
@@ -20,6 +20,9 @@ object RecognitionRuleCodec {
             disabledApplicationRulePackages.put(it)
         }
         root.put("disabledApplicationRulePackages", disabledApplicationRulePackages)
+        val startupOnlyPackages = JSONArray()
+        configuration.startupOnlyPackages.sorted().forEach { startupOnlyPackages.put(it) }
+        root.put("startupOnlyPackages", startupOnlyPackages)
         return root.toString()
     }
 
@@ -45,10 +48,20 @@ object RecognitionRuleCodec {
             disabledApplicationRulePackages.retainAll(
                 applicationRules.filterValues { it.isNotEmpty() }.keys
             )
+            val startupOnlyPackages = linkedSetOf<String>()
+            val startupPackages = root.optJSONArray("startupOnlyPackages")
+            if (startupPackages != null) {
+                for (index in 0 until startupPackages.length()) {
+                    startupPackages.optString(index).trim().takeIf { it.isNotEmpty() }?.let {
+                        startupOnlyPackages.add(it)
+                    }
+                }
+            }
             RecognitionConfiguration(
                 globalRules,
                 applicationRules,
-                disabledApplicationRulePackages
+                disabledApplicationRulePackages,
+                startupOnlyPackages
             )
         }.getOrDefault(RecognitionConfiguration())
     }

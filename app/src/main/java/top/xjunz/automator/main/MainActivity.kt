@@ -35,6 +35,7 @@ import top.xjunz.automator.databinding.ItemSetupStepBinding
 import top.xjunz.automator.model.Record
 import top.xjunz.automator.rules.AppRulePreferences
 import top.xjunz.automator.rules.AppRulesActivity
+import top.xjunz.automator.rules.RecognitionRulesActivity
 import top.xjunz.automator.stats.StatsActivity
 import top.xjunz.automator.test.TestActivity
 import top.xjunz.automator.util.formatTime
@@ -173,6 +174,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.ibMenu.setOnClickListener { showMenu() }
         binding.btnFalsePositive.setOnClickListener { blacklistLatestAction() }
+        binding.btnLatestActionRules.setOnClickListener { showLatestActionRules() }
         binding.btnRun.setOnClickListener { handlePrimaryServiceAction() }
         binding.rlStats.setOnClickListener { showRecords() }
         binding.rlAppRules.setOnClickListener { showAppRules() }
@@ -387,6 +389,13 @@ class MainActivity : AppCompatActivity() {
         binding.btnFalsePositive.isEnabled = !blacklisted
         binding.btnFalsePositive.setText(
             if (blacklisted) R.string.already_blacklisted else R.string.false_positive_blacklist
+        )
+    }
+
+    private fun showLatestActionRules() {
+        val packageName = latestActionPackage?.takeIf { it.isNotBlank() } ?: return
+        startActivity(
+            RecognitionRulesActivity.createIntent(this, packageName, latestActionLabel?.toString())
         )
     }
 

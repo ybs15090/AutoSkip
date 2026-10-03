@@ -94,6 +94,10 @@
     <string name="format_blacklisted_app">已将“%s”加入黑名单</string>
     <string name="undo">撤销</string>
     <string name="recognition_rules">识别规则</string>
+    <string name="recognition_startup_only">仅在启动时跳过</string>
+    <string name="expand_startup_only_summary">展开说明</string>
+    <string name="collapse_startup_only_summary">收起说明</string>
+    <string name="recognition_startup_only_summary">默认关闭。开启后，仅在该应用进入前台的前 8 秒自动跳过，确认跳过后即停止本轮识别；应用内切换页面不会重新计时。从后台返回也视为一次启动，对全局和专属规则均生效。</string>
     <string name="global_recognition_rules">全局识别规则</string>
     <string name="global_rules_summary">没有单独配置的应用使用这些全局规则。多个候选同时出现时，系统会按文字匹配、位置、大小和可点击性评分。</string>
     <string name="format_app_rules_summary">“%s”的专属规则会覆盖全局规则。</string>

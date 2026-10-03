@@ -77,6 +77,22 @@ class RecognitionRulesActivity : AppCompatActivity() {
             binding.btnSecondaryAction.setOnClickListener { confirmRestoreDefaults() }
         } else {
             binding.toolbar.title = appLabel
+            binding.startupOnlySettings.visibility = View.VISIBLE
+            val applicationPackage = packageNameForRules ?: return
+            binding.switchStartupOnly.isChecked = RecognitionRulePreferences
+                .isStartupOnly(applicationPackage)
+            binding.switchStartupOnly.setOnCheckedChangeListener { _, enabled ->
+                RecognitionRulePreferences.setStartupOnly(applicationPackage, enabled)
+                viewModel.syncRuleConfiguration()
+            }
+            binding.btnStartupOnlySummary.setOnClickListener {
+                val expanded = binding.tvStartupOnlySummary.visibility != View.VISIBLE
+                binding.tvStartupOnlySummary.visibility = if (expanded) View.VISIBLE else View.GONE
+                binding.btnStartupOnlySummary.setText(
+                    if (expanded) R.string.collapse_startup_only_summary
+                    else R.string.expand_startup_only_summary
+                )
+            }
             binding.btnLearning.visibility = View.VISIBLE
             binding.btnLearning.setOnClickListener { explainLearningMode() }
         }

@@ -12,6 +12,7 @@ import android.system.OsConstants.SEEK_SET
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import dev.rikka.tools.refine.Refine
 import rikka.shizuku.SystemServiceHelper
 import top.xjunz.automator.model.Result
@@ -22,6 +23,7 @@ import top.xjunz.automator.recognition.RecognitionDiscoveryPolicy
 import top.xjunz.automator.recognition.RecognitionEngine
 import top.xjunz.automator.recognition.RecognitionRuleCodec
 import top.xjunz.automator.recognition.RecognitionSearchStrategy
+import top.xjunz.automator.recognition.StartupRecognitionPolicy
 import top.xjunz.automator.rules.ApplicationRuleMatcher
 import top.xjunz.automator.util.Records
 import top.xjunz.automator.util.formatCurrentTime
@@ -171,12 +173,32 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         var nextDiscoveryToken = 0L
         val activeAttempts = mutableMapOf<String, PendingRecognitionAttempt>()
         var activeDiscovery: PendingRecognitionDiscovery? = null
+        val startupPolicy = StartupRecognitionPolicy()
         uiAutomation.serviceInfo = uiAutomation.serviceInfo.apply {
             eventTypes = AccessibilityEvent.TYPE_WINDOWS_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
             flags = AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
+        }
+
+        fun isActiveApplicationWindow(root: AccessibilityNodeInfo): Boolean {
+            val windows = uiAutomation.windows.orEmpty()
+            try {
+                return windows.any {
+                    it.id == root.windowId && it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+                }
+            } finally {
+                windows.forEach { it.recycle() }
+            }
+        }
+
+        fun isStartupRecognitionAllowed(packageName: String): Boolean {
+            return startupPolicy.isRecognitionAllowed(
+                packageName,
+                packageName in recognitionConfiguration.startupOnlyPackages,
+                SystemClock.uptimeMillis()
+            )
         }
 
         fun processResult(result: Result) {
@@ -219,6 +241,8 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
         fun isAttemptAllowed(attempt: PendingRecognitionAttempt): Boolean {
             return !isLearningPackage(attempt.packageName) &&
                 isPackageEnabled(attempt.packageName) &&
+                (attempt.firstClickUptimeMillis >= 0L ||
+                    isStartupRecognitionAllowed(attempt.packageName)) &&
                 !(singleClickLimitEnabled && !distinct)
         }
 
@@ -230,6 +254,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             }
             finishAttempt(attempt)
             result.passed = true
+            startupPolicy.onSkipConfirmed(attempt.packageName)
             processResult(result)
             log(
                 "Skip click confirmed: pkg=${attempt.packageName}, rule=${attempt.ruleId}, " +
@@ -368,6 +393,11 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                         match.bounds.bottom
                     )
                 }
+                // Verification may finish after the startup deadline, but no further clicks may run.
+                if (!isStartupRecognitionAllowed(attempt.packageName)) {
+                    giveUpAttempt(attempt)
+                    return@execute
+                }
                 if (attempt.firstClickUptimeMillis < 0L) {
                     attempt.firstClickUptimeMillis = SystemClock.uptimeMillis()
                 }
@@ -444,6 +474,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             return oldPkgName == discovery.packageName &&
                 !isLearningPackage(discovery.packageName) &&
                 isPackageEnabled(discovery.packageName) &&
+                isStartupRecognitionAllowed(discovery.packageName) &&
                 !(singleClickLimitEnabled && !distinct) &&
                 !activeAttempts.containsKey(discovery.packageName)
         }
@@ -546,6 +577,17 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
             }
         }
 
+        // Seed the existing foreground application without treating service startup as app startup.
+        val initialRoot = runCatching { uiAutomation.rootInActiveWindow }.getOrNull()
+        try {
+            startupPolicy.reset(
+                if (initialRoot != null &&
+                    runCatching { isActiveApplicationWindow(initialRoot) }.getOrDefault(false)
+                ) initialRoot.packageName?.toString() else null
+            )
+        } finally {
+            initialRoot?.recycle()
+        }
         monitoring = true
         uiAutomation.setOnAccessibilityEventListener listener@{ event ->
             var eventSource: AccessibilityNodeInfo? = null
@@ -556,9 +598,18 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 // work for every event in a WebView burst, or those events can starve the attempt.
                 if (activeAttempts.containsKey(packageName)) return@listener
                 eventSource = event.source
-                val source = uiAutomation.rootInActiveWindow ?: eventSource ?: return@listener
+                val activeRoot = uiAutomation.rootInActiveWindow
+                val source = activeRoot ?: eventSource ?: return@listener
                 scanRoot = source
                 if (source.packageName?.toString() != packageName) return@listener
+                if (activeRoot != null && startupPolicy.foregroundPackageName != packageName &&
+                    runCatching { isActiveApplicationWindow(activeRoot) }.getOrDefault(false)
+                ) {
+                    startupPolicy.onForegroundApplicationChanged(
+                        packageName,
+                        event.eventTime.coerceAtMost(SystemClock.uptimeMillis())
+                    )
+                }
                 if (oldPkgName != packageName) {
                     oldPkgName?.let { previousPackageName ->
                         activeAttempts[previousPackageName]?.let(::confirmAttempt)
@@ -583,6 +634,7 @@ class AutomatorConnection : IAutomatorConnection.Stub() {
                 if (!isPackageEnabled(packageName)) return@listener
                 //when enabled, allow only one injected click during the same foreground session
                 if (singleClickLimitEnabled && !distinct) return@listener
+                if (!isStartupRecognitionAllowed(packageName)) return@listener
                 val rules = recognitionConfiguration.rulesFor(packageName)
                 val match = recognitionEngine.findBestMatch(source, packageName, rules)
                 if (match == null) {

@@ -62,6 +62,9 @@ object RecognitionRulePreferences {
             applicationRules = normalizedApplicationRules,
             disabledApplicationRulePackages = configuration.disabledApplicationRulePackages
                 .filter(normalizedApplicationRules::containsKey)
+                .toSet(),
+            startupOnlyPackages = configuration.startupOnlyPackages
+                .filter { it.isNotBlank() }
                 .toSet()
         )
         return preferences.edit()
@@ -85,6 +88,17 @@ object RecognitionRulePreferences {
 
     fun isApplicationOverrideEnabled(packageName: String): Boolean {
         return snapshot().isApplicationOverrideEnabled(packageName)
+    }
+
+    fun isStartupOnly(packageName: String): Boolean {
+        return packageName in snapshot().startupOnlyPackages
+    }
+
+    fun setStartupOnly(packageName: String, enabled: Boolean) {
+        val current = snapshot()
+        val startupOnlyPackages = current.startupOnlyPackages.toMutableSet()
+        if (enabled) startupOnlyPackages.add(packageName) else startupOnlyPackages.remove(packageName)
+        persist(current.copy(startupOnlyPackages = startupOnlyPackages))
     }
 
     fun saveRules(packageName: String?, rules: List<RecognitionRule>) {

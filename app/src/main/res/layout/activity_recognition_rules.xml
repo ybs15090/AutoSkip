@@ -27,6 +27,40 @@
             tools:text="没有单独规则的应用使用这些全局规则。" />
 
         <LinearLayout
+            android:id="@+id/startup_only_settings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/spacing_normal"
+            android:layout_marginTop="@dimen/spacing_unit"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/switch_startup_only"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                android:text="@string/recognition_startup_only" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_startup_only_summary"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/expand_startup_only_summary"
+                android:textColor="?android:textColorSecondary" />
+
+            <TextView
+                android:id="@+id/tv_startup_only_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/recognition_startup_only_summary"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="?android:textColorSecondary"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="@dimen/spacing_unit"

@@ -197,15 +197,31 @@
                             android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
                             tools:text="2026-08-26 16:00:00 · 点击“跳过”" />
 
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_false_positive"
-                            style="@style/Widget.MaterialComponents.Button.TextButton"
-                            android:layout_width="wrap_content"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_alignParentEnd="true"
                             android:layout_below="@id/tv_latest_action_detail"
                             android:layout_marginTop="@dimen/spacing_small"
-                            android:text="@string/false_positive_blacklist" />
+                            android:gravity="end"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_latest_action_rules"
+                                style="@style/Widget.MaterialComponents.Button.TextButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/recognition_rules" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_false_positive"
+                                style="@style/Widget.MaterialComponents.Button.TextButton"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="@dimen/spacing_unit"
+                                android:layout_weight="2"
+                                android:text="@string/false_positive_blacklist" />
+                        </LinearLayout>
                     </RelativeLayout>
 
                     <RelativeLayout
